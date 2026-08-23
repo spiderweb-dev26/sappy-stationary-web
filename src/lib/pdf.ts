@@ -14,7 +14,7 @@ export function parseGridPreset(grid: string): { cols: number; rows: number } {
 
 /**
  * Generates an A4 Portrait 2D QR Label Sheet PDF (2x2 to 12x12)
- * Perfectly proportional square 2D QR code in every sticker cell.
+ * NO PRICES ON QR LABELS - Clean Title, Logo, Emerald 2D QR Code & Monospace Serial.
  */
 export function generateQrSheetPdf(
   items: InventoryItem[],
@@ -72,7 +72,7 @@ export function generateQrSheetPdf(
       const isCompact = cols >= 6 || rows >= 6;
       const isUltraCompact = cols >= 9 || rows >= 9;
 
-      // 2. Header Area: Logo, Title & Price
+      // 2. Header Area: Logo & Item Name (NO PRICE)
       const logoSize = isUltraCompact ? 0 : isCompact ? Math.min(innerW * 0.2, 5) : Math.min(innerW * 0.22, 8);
       const headerTop = innerY + 1.5;
 
@@ -84,7 +84,7 @@ export function generateQrSheetPdf(
         } catch (e) {}
       }
 
-      // Title & Price text
+      // Title text (NO PRICE)
       const textMaxW = logoSize > 0 ? innerW - logoSize - 2.5 : innerW - 2;
       let textBottom = headerTop;
 
@@ -101,29 +101,20 @@ export function generateQrSheetPdf(
           doc.text(line, innerX + 1.5, textBottom + titleSize * 0.35);
           textBottom += titleSize * 0.35 + 0.6;
         });
-
-        if (item.sellingPrice > 0) {
-          const priceSize = isCompact ? 4 : Math.min(6.5, cellWidth * 0.13);
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(priceSize);
-          doc.setTextColor(4, 120, 87); // emerald-700
-          doc.text(formatCurrency(item.sellingPrice), innerX + 1.5, textBottom + priceSize * 0.35);
-          textBottom += priceSize * 0.35 + 1.2;
-        }
       }
 
-      // 3. Perfect Centered Square 2D QR Code (1:1 Ratio)
+      // 3. Centered Square 2D QR Code in Emerald Green (#064e3b)
       const reservedBottom = isUltraCompact ? 3.5 : isCompact ? 5.5 : 8;
       const availableQrH = innerH - (textBottom - innerY) - reservedBottom;
       const availableQrW = innerW - 3;
       
-      const qrSize = Math.max(5, Math.min(availableQrW, availableQrH, 42));
+      const qrSize = Math.max(5, Math.min(availableQrW, availableQrH, 46));
 
       const qrX = innerX + (innerW - qrSize) / 2;
       const qrY = textBottom + Math.max(0.5, (availableQrH - qrSize) / 2);
 
       const serialToEncode = item.serial || item.sku || `SL-26-${item.id.slice(-5).toUpperCase()}`;
-      drawQrJsPdf(doc, serialToEncode, qrX, qrY, qrSize);
+      drawQrJsPdf(doc, serialToEncode, qrX, qrY, qrSize, { r: 6, g: 78, b: 59 });
 
       // 4. Monospace Serial Code Below QR
       const serialFontSize = isUltraCompact ? 3.5 : isCompact ? 4.5 : Math.min(7, cellWidth * 0.13);
@@ -357,7 +348,7 @@ export function generateReceiptPdf(sale: Sale, storeName: string = "Sappy Statio
 
   y += 6;
   const qrSize = 22;
-  drawQrJsPdf(doc, sale.receiptNo, (pw - qrSize) / 2, y, qrSize);
+  drawQrJsPdf(doc, sale.receiptNo, (pw - qrSize) / 2, y, qrSize, { r: 6, g: 78, b: 59 });
   
   y += qrSize + 4;
   doc.setFontSize(7);
