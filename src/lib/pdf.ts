@@ -224,7 +224,7 @@ export function generateInventoryLedgerPdf(
       fontSize: 8.5,
     },
     footStyles: {
-      fillColor: [6, 78, 59],
+      fillColor:,
       textColor: [255, 255, 255],
       fontStyle: "bold",
       fontSize: 8.5,
