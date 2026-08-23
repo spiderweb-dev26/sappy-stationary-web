@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   return withRetry(async () => {
     db.ensureSchema();
     const body = await req.json();
-    const { name, email, password, role } = body;
+    const { name, email, password } = body;
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -30,13 +30,13 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       email: cleanEmail,
       password: password,
-      role: role || "CASHIER",
+      role: "ADMIN",
       createdAt: new Date(),
     };
 
     db.users.push(newUser);
     if (typeof db.logActivity === "function") {
-      db.logActivity("USER_REGISTER", `New user registered: ${newUser.name} (${newUser.role})`, { name: newUser.name });
+      db.logActivity("USER_REGISTER", `New administrator registered: ${newUser.name}`, { name: newUser.name });
     }
 
     return NextResponse.json(

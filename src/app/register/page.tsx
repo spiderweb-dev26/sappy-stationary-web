@@ -10,6 +10,7 @@ import {
   Lock,
   User,
   Loader2,
+  ShieldCheck,
 } from "lucide-react";
 import BrandMark from "@/components/BrandMark";
 
@@ -19,7 +20,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("CASHIER");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -52,7 +52,7 @@ export default function RegisterPage() {
           name: name.trim(),
           email: email.toLowerCase().trim(),
           password,
-          role,
+          role: "ADMIN",
         }),
       });
 
@@ -83,26 +83,33 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 bg-cream-100 text-slate-900 selection:bg-emerald-200">
       <div className="max-w-md w-full space-y-6">
+        {/* Brand Header with Green Logo Title */}
         <div className="text-center space-y-3 flex flex-col items-center">
-          <BrandMark />
+          <BrandMark lightMode={true} />
           <p className="text-xs text-slate-500 font-medium max-w-xs">
-            Create a staff account to access the shared inventory, POS, and sales catalog.
+            Create an administrator account to access the shared inventory, POS, and sales catalog.
           </p>
         </div>
 
+        {/* Registration Card */}
         <div className="bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-8 space-y-5">
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold">
-              <UserPlus className="w-5 h-5" />
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-display font-black text-lg text-slate-900">
+                  Register New User
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Full Administrator Access
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="font-display font-black text-lg text-slate-900">
-                Register New User
-              </h2>
-              <p className="text-xs text-slate-500">
-                Cashier, Store Manager, or Staff account
-              </p>
-            </div>
+            <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3 text-emerald-700" /> Admin
+            </span>
           </div>
 
           {error && (
@@ -112,6 +119,7 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleRegister} className="space-y-4 text-xs">
+            {/* Full Name */}
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Full Name *
@@ -129,6 +137,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* Email Address */}
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Email Address *
@@ -146,31 +155,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Staff Role
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Cashier / Staff", val: "CASHIER" },
-                  { label: "Store Manager", val: "MANAGER" },
-                ].map((r) => (
-                  <button
-                    key={r.val}
-                    type="button"
-                    onClick={() => setRole(r.val)}
-                    className={`py-2 px-3 rounded-xl border text-center font-bold text-xs transition-all ${
-                      role === r.val
-                        ? "bg-emerald-800 text-white border-emerald-800 shadow-sm"
-                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+            {/* Password Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
