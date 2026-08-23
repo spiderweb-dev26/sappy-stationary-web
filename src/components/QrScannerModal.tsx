@@ -36,6 +36,7 @@ export default function QrScannerModal({
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isScanningActiveRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -46,6 +47,7 @@ export default function QrScannerModal({
     let isSubscribed = true;
     setIsInitializing(true);
     setCameraError(null);
+    isScanningActiveRef.current = true;
 
     const initCamera = async () => {
       try {
@@ -92,15 +94,16 @@ export default function QrScannerModal({
           videoRef.current.muted = true;
           
           await videoRef.current.play().catch(() => {});
-          setIsInitializing(false);
-
-          if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
-          animFrameIdRef.current = requestAnimationFrame(scanVideoFrame);
+          if (isSubscribed) {
+            setIsInitializing(false);
+            if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+            animFrameIdRef.current = requestAnimationFrame(scanVideoFrame);
+          }
         }
       } catch (err: any) {
         if (isSubscribed) {
           setCameraError(
-            "Camera permission denied or camera not available. You can enter the serial below or upload a QR image."
+            "Camera permission denied or camera not available. You can enter the serial below or upload a QR photo."
           );
           setIsInitializing(false);
         }
@@ -111,11 +114,13 @@ export default function QrScannerModal({
 
     return () => {
       isSubscribed = false;
+      isScanningActiveRef.current = false;
       stopCameraStream();
     };
   }, [isOpen, selectedDeviceId]);
 
   const stopCameraStream = () => {
+    isScanningActiveRef.current = false;
     if (animFrameIdRef.current) {
       cancelAnimationFrame(animFrameIdRef.current);
       animFrameIdRef.current = null;
@@ -126,8 +131,8 @@ export default function QrScannerModal({
     }
   };
 
-  const scanVideoFrame = () => {
-    if (!isOpen) return;
+  const scanVideoFrame = async () => {
+    if (!isScanningActiveRef.current || !isOpen) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -143,8 +148,26 @@ export default function QrScannerModal({
 
         if (ctx) {
           ctx.drawImage(video, 0, 0, vw, vh);
+
+          // 1. Native BarcodeDetector API check
+          if ("BarcodeDetector" in window) {
+            try {
+              const barcodeDetector = new (window as any).BarcodeDetector({
+                formats: ["qr_code", "code_128", "code_39", "ean_13"],
+              });
+              const detected = await barcodeDetector.detect(canvas);
+              if (detected && detected.length > 0 && detected[0].rawValue) {
+                const clean = normalizeScannedCode(detected[0].rawValue);
+                if (clean) {
+                  handleSuccessfulScan(clean);
+                  return;
+                }
+              }
+            } catch (e) {}
+          }
+
+          // 2. jsQR Frame Decoding
           const imageData = ctx.getImageData(0, 0, vw, vh);
-          
           const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
             inversionAttempts: "attemptBoth",
           });
@@ -160,7 +183,9 @@ export default function QrScannerModal({
       }
     }
 
-    animFrameIdRef.current = requestAnimationFrame(scanVideoFrame);
+    if (isScanningActiveRef.current) {
+      animFrameIdRef.current = requestAnimationFrame(scanVideoFrame);
+    }
   };
 
   const handleSuccessfulScan = (code: string) => {
