@@ -1,9 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, Loader2, ArrowRight, ShieldCheck } from "lucide-react";
+import {
+  Lock,
+  Mail,
+  Loader2,
+  ArrowRight,
+  UserPlus,
+} from "lucide-react";
 import BrandMark from "@/components/BrandMark";
 
 export default function LoginPage() {
@@ -20,124 +27,137 @@ export default function LoginPage() {
 
     try {
       const res = await signIn("credentials", {
-        email,
-        password,
         redirect: false,
+        email: email.toLowerCase().trim(),
+        password,
       });
 
       if (res?.error) {
-        setError("Invalid credentials. Please try again.");
+        setError("Invalid email or password. Please try again.");
       } else {
         router.push("/inventory");
-        router.refresh();
       }
     } catch (err: any) {
-      setError(err.message || "Failed to sign in");
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickLogin = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword("sappy2026");
+  const handleQuickLogin = (quickEmail: string, quickPass: string) => {
+    setEmail(quickEmail);
+    setPassword(quickPass);
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-gradient-to-br from-emerald-950 via-emerald-900 to-slate-900">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 border border-emerald-800/40 relative overflow-hidden">
-        {/* Decorative corner glow */}
-        <div className="absolute -right-16 -top-16 w-36 h-36 bg-mint-400/20 rounded-full blur-2xl pointer-events-none" />
-
-        {/* Brand Header */}
-        <div className="flex flex-col items-center text-center mb-8">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 bg-cream-100 text-slate-900 selection:bg-emerald-200">
+      <div className="max-w-md w-full space-y-6">
+        <div className="text-center space-y-3 flex flex-col items-center">
           <BrandMark />
-          <p className="text-xs text-slate-500 mt-3 font-medium">
-            Multi-User Shared Inventory & Point of Sale System
+          <p className="text-xs text-slate-500 font-medium max-w-xs">
+            Shared multi-user inventory, barcode/QR catalog, and POS management.
           </p>
         </div>
 
-        {error && (
-          <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
-            {error}
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-8 space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h2 className="font-display font-black text-lg text-slate-900">
+                Staff Sign In
+              </h2>
+              <p className="text-xs text-slate-500">Access the shared store database</p>
+            </div>
+            <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+              Multi-User
+            </span>
           </div>
-        )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Staff Email Address
-            </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="manager@sappy.local"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
-              />
+          {error && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 animate-fade-in">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4 text-xs">
+            <div>
+              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Email Address
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@sappy.local"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-display font-black text-sm rounded-2xl shadow-lg shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              <span>Sign In to Sappy</span>
+            </button>
+          </form>
+
+          {/* Quick Demo Switcher */}
+          <div className="pt-3 border-t border-slate-100 space-y-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Quick Switch Demo Accounts:
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleQuickLogin("manager@sappy.local", "sappy2026")}
+                className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left text-[11px] transition-colors"
+              >
+                <div className="font-bold text-slate-800">Store Manager</div>
+                <div className="text-[9px] text-slate-400 font-mono">manager@sappy.local</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickLogin("helen@sappy.local", "sappy2026")}
+                className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left text-[11px] transition-colors"
+              >
+                <div className="font-bold text-slate-800">Helen (Cashier)</div>
+                <div className="text-[9px] text-slate-400 font-mono">helen@sappy.local</div>
+              </button>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-2 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-700/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                <span>Sign In to Terminal</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* Quick Demo Logins */}
-        <div className="mt-8 pt-6 border-t border-slate-100">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-            Quick Demo Accounts
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin("manager@sappy.local")}
-              className="px-3 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 text-slate-700 transition-colors text-center border border-slate-200"
+          <div className="pt-2 flex items-center justify-between text-xs text-slate-500">
+            <span>New staff member?</span>
+            <Link
+              href="/register"
+              className="font-bold text-emerald-800 hover:underline flex items-center gap-1"
             >
-              Manager Account
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin("helen@sappy.local")}
-              className="px-3 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 text-slate-700 transition-colors text-center border border-slate-200"
-            >
-              Cashier (Helen)
-            </button>
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Create Account</span>
+            </Link>
           </div>
-          <p className="text-[10px] text-slate-400 text-center mt-3 flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Master Password: <code className="font-bold text-slate-600">sappy2026</code>
-          </p>
         </div>
       </div>
     </div>
