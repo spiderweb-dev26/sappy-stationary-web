@@ -5,6 +5,11 @@ import { drawBarcodeJsPdf } from "./barcode";
 import { formatCurrency, formatDate, formatDateTime } from "./format";
 import { SAPPY_LOGO_BASE64 } from "./logoData";
 
+const COLOR_EMERALD_DARK: [number, number, number] =;
+const COLOR_EMERALD_MED: [number, number, number] =;
+const COLOR_WHITE: [number, number, number] = [255, 255, 255];
+const COLOR_SLATE: [number, number, number] = [15, 23, 42];
+
 export function parseGridPreset(grid: string): { cols: number; rows: number } {
   const parts = (grid || "3x8").toLowerCase().split("x");
   const cols = parseInt(parts[0], 10) || 3;
@@ -13,7 +18,7 @@ export function parseGridPreset(grid: string): { cols: number; rows: number } {
 }
 
 /**
- * Generates an A4 Portrait Barcode Label Sheet PDF (e.g. 3x8, 4x10, 2x5, etc.)
+ * Generates an A4 Portrait Barcode Label Sheet PDF
  */
 export function generateBarcodeSheetPdf(
   items: InventoryItem[],
@@ -61,7 +66,7 @@ export function generateBarcodeSheetPdf(
       const innerX = cellX + padding;
       const innerY = cellY + padding;
 
-      // 1. Draw rounded sticker frame / scissor guide
+      // 1. Rounded frame
       doc.setDrawColor(203, 213, 225);
       doc.setLineWidth(0.25);
       doc.setFillColor(254, 252, 246);
@@ -78,7 +83,7 @@ export function generateBarcodeSheetPdf(
         }
       } catch (e) {}
 
-      // 3. Item Name (max 2 lines) & Price badge
+      // 3. Item Name & Price
       doc.setFont("helvetica", "bold");
       doc.setFontSize(Math.min(8, cellWidth * 0.14));
       doc.setTextColor(15, 23, 42);
@@ -98,8 +103,8 @@ export function generateBarcodeSheetPdf(
       doc.setTextColor(4, 120, 87);
       doc.text(formatCurrency(item.sellingPrice), innerX + 2, currentY + 1);
 
-      // 4. 1D Vector Code 128 Barcode
-      const serialToEncode = item.serial || item.sku || `SL-26-${item.id.slice(-5).toUpperCase()}`;
+      // 4. Code 128 Barcode
+      const serialToEncode = item.serial || item.sku || "SL-26-00000";
       const barcodeW = innerW - 4;
       const barcodeH = Math.max(10, innerH - (currentY - innerY) - 5);
       const barcodeX = innerX + 2;
@@ -108,11 +113,11 @@ export function generateBarcodeSheetPdf(
       drawBarcodeJsPdf(doc, serialToEncode, barcodeX, barcodeY, barcodeW, barcodeH, {
         showText: true,
         fontSize: Math.min(7, cellWidth * 0.12),
-        textColor: [15, 23, 42],
+        textColor: COLOR_SLATE,
       });
     });
 
-    // 5. Branded Footer Line
+    // 5. Footer Line
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.3);
     doc.line(marginX, pageHeight - 10, pageWidth - marginX, pageHeight - 10);
@@ -127,7 +132,6 @@ export function generateBarcodeSheetPdf(
   return doc;
 }
 
-// Backward compatibility alias for QR sheet routes
 export { generateBarcodeSheetPdf as generateQrSheetPdf };
 
 /**
@@ -218,20 +222,20 @@ export function generateInventoryLedgerPdf(
     ],
     theme: "striped",
     headStyles: {
-      fillColor:,
-      textColor: [255, 255, 255],
+      fillColor: COLOR_EMERALD_MED,
+      textColor: COLOR_WHITE,
       fontStyle: "bold",
       fontSize: 8.5,
     },
     footStyles: {
-      fillColor:,
-      textColor: [255, 255, 255],
+      fillColor: COLOR_EMERALD_DARK,
+      textColor: COLOR_WHITE,
       fontStyle: "bold",
       fontSize: 8.5,
     },
     bodyStyles: {
       fontSize: 8,
-      textColor: [15, 23, 42],
+      textColor: COLOR_SLATE,
     },
   });
 
@@ -339,6 +343,7 @@ export function generateReceiptPdf(sale: Sale, storeName: string = "Sappy Statio
   drawBarcodeJsPdf(doc, sale.receiptNo, (pw - barcodeW) / 2, y, barcodeW, barcodeH, {
     showText: true,
     fontSize: 7,
+    textColor: COLOR_SLATE,
   });
   
   y += barcodeH + 4;
