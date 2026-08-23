@@ -52,18 +52,26 @@ export default function ResetMaintenanceModal({
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Reset failed");
+      // Safe text-first JSON parsing
+      let data: any = {};
+      const responseText = await res.text();
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (jsonErr) {
+        data = { error: `Server response error (${res.status}): ${responseText || res.statusText}` };
       }
 
-      setFeedback({ msg: data.message, type: "success" });
+      if (!res.ok) {
+        throw new Error(data.error || `Reset failed with status ${res.status}`);
+      }
+
+      setFeedback({ msg: data.message || "Reset operation completed successfully!", type: "success" });
       onSuccess?.();
       setTimeout(() => {
         setIsMasterModalOpen(false);
         setSelectedResetMode(null);
         onClose();
-      }, 2000);
+      }, 2200);
     } catch (err: any) {
       setFeedback({ msg: err.message || "Reset action failed", type: "error" });
     }

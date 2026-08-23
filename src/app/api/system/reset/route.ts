@@ -1,22 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, withRetry } from "@/lib/core";
+import { db } from "@/lib/core";
 import { getAuthSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  return withRetry(async () => {
+  try {
     db.ensureSchema();
     const session = await getAuthSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
     }
 
-    const body = await req.json();
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
+    }
+
     const { mode, masterPassword } = body;
 
     if (!masterPassword || !db.verifyMasterPassword(masterPassword)) {
-      return NextResponse.json({ error: "Invalid master password. Authorization rejected." }, { status: 403 });
+      return NextResponse.json(
+        { error: "Invalid master password. Authorization rejected." },
+        { status: 403 }
+      );
     }
 
     if (mode === "YEAR_END") {
@@ -41,5 +50,11 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-  });
+  } catch (err: any) {
+    console.error("System reset API error:", err);
+    return NextResponse.json(
+      { error: err.message || "Internal server error during reset operation." },
+      { status: 500 }
+    );
+  }
 }
