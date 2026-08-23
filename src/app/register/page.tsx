@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
   UserPlus,
@@ -12,12 +11,12 @@ import {
   ShieldAlert,
   ShieldCheck,
   KeyRound,
+  CheckCircle2,
 } from "lucide-react";
 import BrandMark from "@/components/BrandMark";
 import ProgressBar from "@/components/ProgressBar";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,6 +24,7 @@ export default function RegisterPage() {
   const [masterPasscode, setMasterPasscode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +64,9 @@ export default function RegisterPage() {
         throw new Error(data.error || "Failed to create account.");
       }
 
+      setSuccess(true);
+
+      // Auto sign-in and direct page navigation
       const loginRes = await signIn("credentials", {
         redirect: false,
         email: email.toLowerCase().trim(),
@@ -71,9 +74,9 @@ export default function RegisterPage() {
       });
 
       if (loginRes?.ok) {
-        router.push("/inventory");
+        window.location.href = "/inventory";
       } else {
-        router.push("/login");
+        window.location.href = "/login";
       }
     } catch (err: any) {
       setError(err.message || "Registration failed. Check master passcode.");
@@ -84,6 +87,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 bg-cream-100 text-slate-900 selection:bg-emerald-200">
       <div className="max-w-md w-full space-y-6">
+        {/* Brand Header */}
         <div className="text-center space-y-3 flex flex-col items-center">
           <BrandMark lightMode={true} />
           <p className="text-xs text-slate-500 font-medium max-w-xs">
@@ -91,6 +95,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
+        {/* Card */}
         <div className="bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-8 space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-3">
@@ -116,9 +121,16 @@ export default function RegisterPage() {
             </div>
           )}
 
+          {success && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-900 flex items-center gap-2 animate-fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span>Account created! Redirecting to store...</span>
+            </div>
+          )}
+
           {loading ? (
             <div className="py-6 space-y-3">
-              <ProgressBar label="Creating administrator account..." durationMs={1200} />
+              <ProgressBar label="Creating administrator account..." durationMs={600} />
             </div>
           ) : (
             <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
@@ -199,7 +211,7 @@ export default function RegisterPage() {
                 <input
                   type="password"
                   required
-                  placeholder="Enter shop master passcode (default: sappy2026)"
+                  placeholder="Enter master passcode"
                   value={masterPasscode}
                   onChange={(e) => setMasterPasscode(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"

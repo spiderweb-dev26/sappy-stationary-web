@@ -9,6 +9,8 @@ import {
   updateDoc,
   deleteDoc,
   writeBatch,
+  query,
+  where,
   Firestore,
 } from "firebase/firestore";
 
@@ -28,6 +30,22 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 export const firestore: Firestore = getFirestore(app);
 
+// Timeout helper to prevent serverless hanging
+export async function withFirestoreTimeout<T>(promise: Promise<T>, timeoutMs: number = 2500): Promise<T> {
+  let timer: any;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("Firestore operation timeout")), timeoutMs);
+  });
+  try {
+    const res = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 export {
   collection,
   doc,
@@ -37,4 +55,6 @@ export {
   updateDoc,
   deleteDoc,
   writeBatch,
+  query,
+  where,
 };
