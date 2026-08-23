@@ -45,51 +45,39 @@ export const authOptions: AuthOptions = {
             );
             const querySnap = await getDocs(q);
 
-            if (querySnap.empty) {
-              // User NOT registered in Firestore - REJECT
+            if (!querySnap.empty) {
+              const userDoc = querySnap.docs[0].data() as User;
+
+              if (userDoc.password && userDoc.password === inputPassword) {
+                return {
+                  id: userDoc.id,
+                  name: userDoc.name,
+                  email: userDoc.email,
+                  role: userDoc.role || "ADMIN",
+                };
+              }
+              // Incorrect password
               return null;
             }
-
-            const userDoc = querySnap.docs[0].data() as User;
-
-            // Strict password check
-            if (!userDoc.password || userDoc.password !== inputPassword) {
-              // Incorrect password - REJECT
-              return null;
-            }
-
-            return {
-              id: userDoc.id,
-              name: userDoc.name,
-              email: userDoc.email,
-              role: userDoc.role || "ADMIN",
-            };
           } catch (err) {
             console.error("Firestore auth query error:", err);
           }
         }
 
-        // 2. Memory Store Fallback Authentication
+        // 2. Memory Store Fallback
         db.ensureSchema();
         const user = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
 
-        if (!user) {
-          // User NOT found - REJECT
-          return null;
+        if (user && user.password && user.password === inputPassword) {
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role || "ADMIN",
+          };
         }
 
-        // Strict password check
-        if (!user.password || user.password !== inputPassword) {
-          // Incorrect password - REJECT
-          return null;
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role || "ADMIN",
-        };
+        return null;
       },
     }),
   ],

@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, withRetry } from "@/lib/core";
+import {
+  firestore,
+  isFirebaseConfigured,
+  doc,
+  setDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+} from "@/lib/firebase";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +26,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // STRICT SECURITY: Master passcode verification
+    // Verify master passcode
     if (
       !masterPasscode ||
       (typeof db.verifyMasterPassword === "function"
@@ -30,10 +40,26 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = email.toLowerCase().trim();
+
+    // Check duplicate in Firestore
+    if (isFirebaseConfigured && firestore) {
+      try {
+        const q = query(collection(firestore, "users"), where("email", "==", cleanEmail));
+        const querySnap = await getDocs(q);
+        if (!querySnap.empty) {
+          return NextResponse.json(
+            { error: "An administrator account with this email address already exists." },
+            { status: 400 }
+          );
+        }
+      } catch (e) {}
+    }
+
+    // Check duplicate in memory
     const existing = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
     if (existing) {
       return NextResponse.json(
-        { error: "An account with this email address already exists." },
+        { error: "An administrator account with this email address already exists." },
         { status: 400 }
       );
     }
@@ -42,14 +68,36 @@ export async function POST(req: NextRequest) {
       id: `usr-${Date.now()}`,
       name: name.trim(),
       email: cleanEmail,
-      password: password,
+      password: password.trim(),
       role: "ADMIN",
       createdAt: new Date(),
     };
 
+    // 1. Write directly to Firestore
+    if (isFirebaseConfigured && firestore) {
+      try {
+        await setDoc(doc(firestore, "users", newUser.id), {
+          id: newUser.id,
+          name: newUser.name,
+          email: newUser.email,
+          password: newUser.password,
+          role: newUser.role,
+          createdAt: newUser.createdAt.toISOString(),
+        });
+      } catch (err) {
+        console.error("Firestore user creation error:", err);
+      }
+    }
+
+    // 2. Write to memory store
     db.users.push(newUser);
+
     if (typeof db.logActivity === "function") {
-      db.logActivity("USER_REGISTER", `Administrator account registered: ${newUser.name} (${newUser.email})`, { name: newUser.name });
+      db.logActivity(
+        "USER_REGISTER",
+        `Administrator account registered: ${newUser.name} (${newUser.email})`,
+        { name: newUser.name }
+      );
     }
 
     return NextResponse.json(
