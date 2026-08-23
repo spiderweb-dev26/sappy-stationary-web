@@ -8,7 +8,7 @@ import { SAPPY_LOGO_BASE64 } from "./logoData";
 export function parseGridPreset(grid: string): { cols: number; rows: number } {
   const parts = (grid || "3x8").toLowerCase().split("x");
   const cols = parseInt(parts[0], 10) || 3;
-  const rows = parseInt(parts[1], 10) || 8;
+  const rows = parseInt(parts, 10) || 8;
   return { cols, rows };
 }
 
@@ -22,7 +22,7 @@ export function generateBarcodeSheetPdf(
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
-    format: "a4", // 210 x 297 mm
+    format: "a4",
   });
 
   const grid = options.grid || "3x8";
@@ -73,7 +73,9 @@ export function generateBarcodeSheetPdf(
       const logoY = innerY + 1.5;
 
       try {
-        doc.addImage(SAPPY_LOGO_BASE64, "PNG", logoX, logoY, logoSize, logoSize);
+        if (SAPPY_LOGO_BASE64) {
+          doc.addImage(SAPPY_LOGO_BASE64, "PNG", logoX, logoY, logoSize, logoSize);
+        }
       } catch (e) {}
 
       // 3. Item Name (max 2 lines) & Price badge
@@ -91,7 +93,6 @@ export function generateBarcodeSheetPdf(
         currentY += 3.2;
       });
 
-      // Price Tag badge
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.setTextColor(4, 120, 87);
@@ -126,6 +127,9 @@ export function generateBarcodeSheetPdf(
   return doc;
 }
 
+// Backward compatibility alias for QR sheet routes
+export { generateBarcodeSheetPdf as generateQrSheetPdf };
+
 /**
  * Generates Landscape Inventory Ledger PDF
  */
@@ -146,7 +150,9 @@ export function generateInventoryLedgerPdf(
   doc.rect(0, 0, pageWidth, 24, "F");
 
   try {
-    doc.addImage(SAPPY_LOGO_BASE64, "PNG", 12, 3.5, 17, 17);
+    if (SAPPY_LOGO_BASE64) {
+      doc.addImage(SAPPY_LOGO_BASE64, "PNG", 12, 3.5, 17, 17);
+    }
   } catch (e) {}
 
   doc.setFont("helvetica", "bold");
@@ -212,7 +218,7 @@ export function generateInventoryLedgerPdf(
     ],
     theme: "striped",
     headStyles: {
-      fillColor: [4, 120, 87],
+      fillColor:,
       textColor: [255, 255, 255],
       fontStyle: "bold",
       fontSize: 8.5,

@@ -3,6 +3,15 @@ import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "./core";
 
+// Ensure NEXTAUTH_URL has a valid fallback with protocol during Vercel build
+if (!process.env.NEXTAUTH_URL) {
+  if (process.env.VERCEL_URL) {
+    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+  } else {
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+  }
+}
+
 export const authOptions: AuthOptions = {
   providers: [
     CredentialsProvider({
@@ -15,14 +24,12 @@ export const authOptions: AuthOptions = {
         db.ensureSchema();
         if (!credentials?.email) return null;
         
-        // Simple demo credentials check
         const email = credentials.email.toLowerCase().trim();
         const user = db.users.find((u) => u.email.toLowerCase() === email);
         if (user) {
           return { id: user.id, name: user.name, email: user.email, role: user.role };
         }
         
-        // Auto-register for cashier demo
         return {
           id: "usr-demo",
           name: credentials.email.split("@")[0] || "Cashier",
@@ -50,7 +57,7 @@ export const authOptions: AuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   },
   secret: process.env.NEXTAUTH_SECRET || "sappy-stationary-super-secret-key-2026",
   pages: {
