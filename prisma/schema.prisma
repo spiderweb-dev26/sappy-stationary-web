@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         String        @default("CASHIER") // ADMIN, MANAGER, CASHIER
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sessions     Session[]
+  activities   ActivityLog[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  ipAddress  String?
+  deviceInfo String?
+  isActive   Boolean  @default(true)
+  lastActive DateTime @default(now())
+  createdAt  DateTime @default(now())
+}
+
+model InventoryItem {
+  id           String          @id @default(cuid())
+  name         String
+  serial       String          @unique // e.g. SL-26-XXXXX
+  sku          String?
+  category     String          @default("General Stationery")
+  unit         String          @default("pcs")
+  quantity     Int             @default(0)
+  minStock     Int             @default(5)
+  costPrice    Float           @default(0.0)
+  sellingPrice Float           @default(0.0)
+  costUnknown  Boolean         @default(false)
+  supplier     String?
+  location     String?
+  notes        String?
+  dupKeptAt    DateTime?
+  dupKeptBy    String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  saleItems    SaleItem[]
+  poItems      PoItem[]
+}
+
+model Sale {
+  id            String      @id @default(cuid())
+  receiptNo     String      @unique
+  customerName  String?
+  customerPhone String?
+  totalAmount   Float
+  discount      Float       @default(0.0)
+  tax           Float       @default(0.0)
+  paymentMethod String      @default("CASH") // CASH, CARD, MOBILE, CREDIT
+  status        String      @default("COMPLETED") // COMPLETED, REFUNDED, CANCELLED
+  isCredit      Boolean     @default(false)
+  isBackdated   Boolean     @default(false)
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  items         SaleItem[]
+  credit        Credit?
+}
+
+model SaleItem {
+  id           String        @id @default(cuid())
+  saleId       String
+  sale         Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         InventoryItem @relation(fields: [itemId], references: [id])
+  quantity     Int
+  unitPrice    Float
+  discount     Float         @default(0.0)
+  subtotal     Float
+}
+
+model Credit {
+  id              String          @id @default(cuid())
+  saleId          String          @unique
+  sale            Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customerName    String
+  customerPhone   String?
+  totalAmount     Float
+  remainingAmount Float
+  dueDate         DateTime?
+  status          String          @default("UNPAID") // UNPAID, PARTIALLY_PAID, PAID
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  payments        CreditPayment[]
+}
+
+model CreditPayment {
+  id            String   @id @default(cuid())
+  creditId      String
+  credit        Credit   @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  amount        Float
+  paymentMethod String   @default("CASH")
+  note          String?
+  createdAt     DateTime @default(now())
+}
+
+model PurchaseOrder {
+  id           String    @id @default(cuid())
+  poNumber     String    @unique
+  supplier     String
+  status       String    @default("DRAFT") // DRAFT, ORDERED, RECEIVED, CANCELLED
+  totalCost    Float     @default(0.0)
+  orderDate    DateTime  @default(now())
+  expectedDate DateTime?
+  receivedDate DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  items        PoItem[]
+}
+
+model PoItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  itemId          String
+  item            InventoryItem @relation(fields: [itemId], references: [id])
+  quantity        Int
+  unitCost        Float
+  subtotal        Float
+}
+
+model Expense {
+  id            String   @id @default(cuid())
+  category      String   // Rent, Utilities, Supplies, Wages, Miscellaneous
+  description   String
+  amount        Float
+  date          DateTime @default(now())
+  paymentMethod String   @default("CASH")
+  createdBy     String?
+  receiptRef    String?
+  createdAt     DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName  String?
+  action    String   // INVENTORY_CREATE, SALE_CREATED, QR_SHEET_GENERATE, etc.
+  details   String
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

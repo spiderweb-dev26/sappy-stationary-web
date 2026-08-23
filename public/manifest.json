@@ -1,0 +1,17 @@
+{
+  "name": "Sappy Stationary",
+  "short_name": "Sappy Stationary",
+  "description": "Shared Multi-User Inventory & POS System for Sappy Stationary Store",
+  "start_url": "/inventory",
+  "display": "standalone",
+  "background_color": "#fdfbf7",
+  "theme_color": "#047857",
+  "icons": [
+    {
+      "src": "/img/logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
