@@ -384,18 +384,22 @@ export function encodeQrCode(text: string, ecl: QrEcc = "M"): boolean[][] {
   return grid;
 }
 
+/**
+ * Draws sharp 2D vector QR Code onto jsPDF canvas in Emerald Green (#064e3b)
+ */
 export function drawQrJsPdf(
   doc: any,
   text: string,
   x: number,
   y: number,
-  size: number
+  size: number,
+  color: { r: number; g: number; b: number } = { r: 6, g: 78, b: 59 }
 ): void {
   const matrix = encodeQrCode(text, "M");
   const count = matrix.length;
   const cellSize = size / count;
 
-  doc.setFillColor(15, 23, 42); // slate-900
+  doc.setFillColor(color.r, color.g, color.b); // Official Sappy Emerald Green #064e3b
   for (let r = 0; r < count; r++) {
     for (let c = 0; c < count; c++) {
       if (matrix[r][c]) {
@@ -405,10 +409,13 @@ export function drawQrJsPdf(
   }
 }
 
+/**
+ * Generates an SVG string representation of the 2D QR code in Emerald Green (#064e3b)
+ */
 export function generateQrSvg(
   text: string,
   size: number = 200,
-  fillColor: string = "#0f172a",
+  fillColor: string = "#064e3b",
   bgColor: string = "#ffffff"
 ): string {
   const matrix = encodeQrCode(text, "M");
