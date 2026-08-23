@@ -9,10 +9,12 @@ import {
   Mail,
   Lock,
   User,
-  Loader2,
+  ShieldAlert,
   ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 import BrandMark from "@/components/BrandMark";
+import ProgressBar from "@/components/ProgressBar";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -20,6 +22,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [masterPasscode, setMasterPasscode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -27,8 +30,8 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
 
-    if (!name.trim() || !email.trim() || !password) {
-      setError("Please fill in all required fields.");
+    if (!name.trim() || !email.trim() || !password || !masterPasscode.trim()) {
+      setError("Please fill in all required fields including the Master Passcode.");
       return;
     }
 
@@ -52,7 +55,7 @@ export default function RegisterPage() {
           name: name.trim(),
           email: email.toLowerCase().trim(),
           password,
-          role: "ADMIN",
+          masterPasscode: masterPasscode.trim(),
         }),
       });
 
@@ -61,7 +64,6 @@ export default function RegisterPage() {
         throw new Error(data.error || "Failed to create account.");
       }
 
-      // Auto sign-in after registration
       const loginRes = await signIn("credentials", {
         redirect: false,
         email: email.toLowerCase().trim(),
@@ -74,8 +76,7 @@ export default function RegisterPage() {
         router.push("/login");
       }
     } catch (err: any) {
-      setError(err.message || "Registration failed. Please try again.");
-    } finally {
+      setError(err.message || "Registration failed. Check master passcode.");
       setLoading(false);
     }
   };
@@ -83,15 +84,13 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 bg-cream-100 text-slate-900 selection:bg-emerald-200">
       <div className="max-w-md w-full space-y-6">
-        {/* Brand Header with Green Logo Title */}
         <div className="text-center space-y-3 flex flex-col items-center">
           <BrandMark lightMode={true} />
           <p className="text-xs text-slate-500 font-medium max-w-xs">
-            Create an administrator account to access the shared inventory, POS, and sales catalog.
+            Create an administrator account. Master Passcode authorization is strictly required.
           </p>
         </div>
 
-        {/* Registration Card */}
         <div className="bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-8 space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-3">
@@ -100,11 +99,9 @@ export default function RegisterPage() {
               </div>
               <div>
                 <h2 className="font-display font-black text-lg text-slate-900">
-                  Register New User
+                  Register User
                 </h2>
-                <p className="text-xs text-slate-500">
-                  Full Administrator Access
-                </p>
+                <p className="text-xs text-slate-500">Administrator Access</p>
               </div>
             </div>
             <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
@@ -113,97 +110,114 @@ export default function RegisterPage() {
           </div>
 
           {error && (
-            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 animate-fade-in">
-              {error}
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 flex items-start gap-2 animate-fade-in">
+              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleRegister} className="space-y-4 text-xs">
-            {/* Full Name */}
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Full Name *
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Helen Tadesse"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
+          {loading ? (
+            <div className="py-6 space-y-3">
+              <ProgressBar label="Creating administrator account..." durationMs={1200} />
             </div>
-
-            {/* Email Address */}
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Email Address *
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  required
-                  placeholder="helen@sappy.local"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-            </div>
-
-            {/* Password Fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Password *
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Full Name *
                 </label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
-                    type="password"
+                    type="text"
                     required
-                    placeholder="Min 4 chars"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                    placeholder="e.g. Helen Tadesse"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Confirm Password *
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Email Address *
                 </label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
-                    type="password"
+                    type="email"
                     required
-                    placeholder="Repeat password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                    placeholder="helen@sappy.local"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-2 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-display font-black text-sm rounded-2xl shadow-lg shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-              <span>Create Account & Sign In</span>
-            </button>
-          </form>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Password *
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="Min 4 chars"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Confirm Password *
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="Repeat password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200/80 space-y-1.5">
+                <label className="block font-bold text-amber-950 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-amber-700" /> Master Passcode Required *
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Enter shop master passcode (default: sappy2026)"
+                  value={masterPasscode}
+                  onChange={(e) => setMasterPasscode(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full mt-2 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-display font-black text-sm rounded-2xl shadow-lg shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Create Administrator Account</span>
+              </button>
+            </form>
+          )}
 
           <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
-            <span>Already have an account? </span>
+            <span>Already registered? </span>
             <Link href="/login" className="font-bold text-emerald-800 hover:underline">
               Sign In Here
             </Link>

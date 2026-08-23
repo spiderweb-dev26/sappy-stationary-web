@@ -12,6 +12,7 @@ import {
   Truck,
   BarChart3,
   History,
+  Users,
   LogOut,
   User,
   ShieldCheck,
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { name: "Purchase Orders", href: "/purchase-orders", icon: Truck },
   { name: "Reports & P&L", href: "/reports", icon: BarChart3 },
   { name: "Activity Log", href: "/activity", icon: History },
+  { name: "Users", href: "/users", icon: Users },
 ];
 
 export default function Sidebar() {
@@ -35,7 +37,7 @@ export default function Sidebar() {
   const { data: session } = useSession();
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
-  if (pathname === "/login") return null;
+  if (pathname === "/login" || pathname === "/register") return null;
 
   return (
     <>
@@ -87,7 +89,7 @@ export default function Sidebar() {
               </div>
               <div className="truncate">
                 <p className="text-xs font-bold text-white truncate">
-                  {session?.user?.name || "Staff Cashier"}
+                  {session?.user?.name || "Administrator"}
                 </p>
                 <p className="text-[10px] text-emerald-300/80 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3 text-emerald-400" /> Master-Protected
