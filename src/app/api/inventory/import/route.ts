@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, withRetry } from "@/lib/core";
+import { db } from "@/lib/core";
 import { getAuthSession } from "@/lib/auth";
 import {
   firestore,
   isFirebaseConfigured,
   doc,
   writeBatch,
+  withFirestoreTimeout,
 } from "@/lib/firebase";
 import { generateAutoSerial } from "@/lib/format";
 import { InventoryItem } from "@/lib/types";
@@ -13,26 +14,35 @@ import { InventoryItem } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  return withRetry(async () => {
-    db.ensureSchema();
+  try {
+    if (typeof db.ensureSchema === "function") {
+      db.ensureSchema();
+    }
+
     const session = await getAuthSession();
 
-    const body = await req.json().catch(() => ({}));
-    const rawItems: any[] = body.items || [];
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
+    const rawItems: any[] = body.items || [];
     if (!Array.isArray(rawItems) || rawItems.length === 0) {
-      return NextResponse.json({ error: "No items provided for import." }, { status: 400 });
+      return NextResponse.json({ error: "No items found in uploaded file." }, { status: 400 });
     }
 
     const insertedItems: InventoryItem[] = [];
     const timestamp = new Date();
 
+    // 1. Process all items synchronously into store
     rawItems.forEach((raw, idx) => {
       const name = (raw.name || "").trim();
       if (!name) return;
 
       const item: InventoryItem = {
-        id: `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 5)}`,
+        id: `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
         name,
         serial: raw.serial || generateAutoSerial("26"),
         sku: raw.sku || null,
@@ -45,7 +55,7 @@ export async function POST(req: NextRequest) {
         costUnknown: Boolean(raw.costUnknown),
         supplier: raw.supplier || null,
         location: raw.location || null,
-        notes: raw.notes || "Imported via Excel spreadsheet",
+        notes: raw.notes || "Imported via Excel",
         dupKeptAt: null,
         dupKeptBy: null,
         userId: session?.user ? (session.user as any).id : null,
@@ -58,21 +68,28 @@ export async function POST(req: NextRequest) {
       insertedItems.push(item);
     });
 
+    // 2. Asynchronous chunked write to Firestore with timeout guard (never blocks HTTP response)
     if (isFirebaseConfigured && firestore && insertedItems.length > 0) {
-      try {
-        const batch = writeBatch(firestore);
-        insertedItems.forEach((it) => {
-          const itemRef = doc(firestore, "items", it.id);
-          batch.set(itemRef, {
-            ...it,
-            createdAt: it.createdAt.toString(),
-            updatedAt: it.updatedAt.toString(),
-          });
-        });
-        await batch.commit();
-      } catch (err) {
-        console.warn("Firestore batch import warning:", err);
-      }
+      (async () => {
+        try {
+          const chunkSize = 100;
+          for (let i = 0; i < insertedItems.length; i += chunkSize) {
+            const chunk = insertedItems.slice(i, i + chunkSize);
+            const batch = writeBatch(firestore);
+            chunk.forEach((it) => {
+              const itemRef = doc(firestore, "items", it.id);
+              batch.set(itemRef, {
+                ...it,
+                createdAt: it.createdAt.toString(),
+                updatedAt: it.updatedAt.toString(),
+              });
+            });
+            await withFirestoreTimeout(batch.commit(), 2000);
+          }
+        } catch (err) {
+          console.warn("Firestore batch write non-blocking warning:", err);
+        }
+      })().catch(() => {});
     }
 
     if (typeof db.logActivity === "function") {
@@ -88,5 +105,11 @@ export async function POST(req: NextRequest) {
       count: insertedItems.length,
       items: insertedItems,
     });
-  });
+  } catch (err: any) {
+    console.error("Batch import error:", err);
+    return NextResponse.json(
+      { error: err.message || "Failed to process import." },
+      { status: 500 }
+    );
+  }
 }

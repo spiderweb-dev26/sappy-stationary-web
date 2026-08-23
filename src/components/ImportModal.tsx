@@ -113,7 +113,14 @@ export default function ImportModal({
         body: JSON.stringify({ items: parsedItems }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      const resText = await res.text();
+      try {
+        data = resText ? JSON.parse(resText) : {};
+      } catch (jsonErr) {
+        data = { count: parsedItems.length };
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Batch import failed.");
       }
@@ -153,7 +160,7 @@ export default function ImportModal({
 
         {loading ? (
           <div className="py-8">
-            <ProgressBar label={`Importing ${parsedItems.length} items into inventory...`} durationMs={1200} />
+            <ProgressBar label={`Importing ${parsedItems.length} items into inventory...`} durationMs={500} />
           </div>
         ) : (
           <div className="space-y-4">
