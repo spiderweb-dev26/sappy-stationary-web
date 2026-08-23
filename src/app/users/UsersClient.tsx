@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import {
   Users,
@@ -46,31 +46,11 @@ export default function UsersClient() {
       setLoading(true);
       const res = await fetch("/api/users");
       const data = await res.json().catch(() => []);
-      
-      let list = Array.isArray(data) ? data : [];
-
-      if (list.length === 0 && session?.user) {
-        list = [{
-          id: (session.user as any).id || "usr-current",
-          name: session.user.name || "Amanueal Getahun",
-          email: session.user.email || "amanuealhailu007@gmail.com",
-          role: "ADMIN",
-          createdAt: new Date(),
-        }];
+      if (Array.isArray(data)) {
+        setUsers(data);
       }
-
-      setUsers(list);
     } catch (e) {
-      console.error(e);
-      if (session?.user) {
-        setUsers([{
-          id: (session.user as any).id || "usr-current",
-          name: session.user.name || "Amanueal Getahun",
-          email: session.user.email || "amanuealhailu007@gmail.com",
-          role: "ADMIN",
-          createdAt: new Date(),
-        }]);
-      }
+      console.error("Fetch users failed:", e);
     } finally {
       setLoading(false);
     }
@@ -78,7 +58,37 @@ export default function UsersClient() {
 
   useEffect(() => {
     fetchUsers();
-  }, [session]);
+  }, []);
+
+  // Guaranteed active user list: combines server users + active session user
+  const effectiveUsers: UserType[] = useMemo(() => {
+    const list = [...users];
+
+    if (session?.user?.email) {
+      const sessionEmail = session.user.email.toLowerCase().trim();
+      const exists = list.some((u) => (u.email || "").toLowerCase().trim() === sessionEmail);
+
+      if (!exists) {
+        list.unshift({
+          id: (session.user as any).id || "usr-current-admin",
+          name: session.user.name || "Amanueal Getahun",
+          email: session.user.email,
+          role: "ADMIN",
+          createdAt: new Date(),
+        });
+      }
+    } else if (list.length === 0 && session?.user?.name) {
+      list.push({
+        id: "usr-current-admin",
+        name: session.user.name,
+        email: session.user.email || "amanuealhailu007@gmail.com",
+        role: "ADMIN",
+        createdAt: new Date(),
+      });
+    }
+
+    return list;
+  }, [users, session]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -122,6 +132,19 @@ export default function UsersClient() {
       if (!res.ok) throw new Error(data.error || "Failed to create administrator account.");
 
       showToast(`Administrator account "${data.name}" created successfully.`);
+      
+      // Optimistic update
+      setUsers((prev) => [
+        {
+          id: data.id || `usr-${Date.now()}`,
+          name: data.name,
+          email: data.email,
+          role: "ADMIN",
+          createdAt: new Date(),
+        },
+        ...prev.filter((u) => u.email.toLowerCase() !== data.email.toLowerCase()),
+      ]);
+
       setIsAddModalOpen(false);
       setNewName("");
       setNewEmail("");
@@ -193,6 +216,7 @@ export default function UsersClient() {
       if (!res.ok) throw new Error(data.error || "Failed to delete account.");
 
       showToast(`Administrator account "${activeUser.name}" removed.`);
+      setUsers((prev) => prev.filter((u) => u.id !== activeUser.id));
       setIsDeleteModalOpen(false);
       setActiveUser(null);
       fetchUsers();
@@ -210,6 +234,7 @@ export default function UsersClient() {
         </div>
       )}
 
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-display font-black text-2xl sm:text-3xl text-slate-900 tracking-tight flex items-center gap-3">
@@ -217,7 +242,7 @@ export default function UsersClient() {
             Users & Security Management
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            {users.length} administrator account(s) registered • Master passcode authorization required for modifications
+            {effectiveUsers.length} administrator account(s) registered • Master passcode authorization required for modifications
           </p>
         </div>
 
@@ -234,12 +259,13 @@ export default function UsersClient() {
         </button>
       </div>
 
+      {/* Main Table */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
-        {loading ? (
+        {loading && effectiveUsers.length === 0 ? (
           <div className="p-12">
-            <ProgressBar label="Loading registered administrators..." durationMs={500} />
+            <ProgressBar label="Loading registered administrators..." durationMs={400} />
           </div>
-        ) : users.length === 0 ? (
+        ) : effectiveUsers.length === 0 ? (
           <div className="p-12 text-center text-slate-400 space-y-3">
             <Users className="w-12 h-12 mx-auto opacity-30 text-emerald-700" />
             <p className="text-sm font-bold text-slate-700">No User Accounts Found</p>
@@ -260,64 +286,74 @@ export default function UsersClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-4 px-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-900 flex items-center justify-center font-bold">
-                          <User className="w-5 h-5" />
+                {effectiveUsers.map((u) => {
+                  const isCurrentSelf = session?.user?.email && u.email.toLowerCase() === session.user.email.toLowerCase();
+                  return (
+                    <tr key={u.id || u.email} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-4 px-5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-900 flex items-center justify-center font-bold">
+                            <User className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                              <span>{u.name}</span>
+                              {isCurrentSelf && (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-700 text-white text-[9px] font-extrabold">
+                                  YOU (Current Session)
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">ID: {u.id}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900 text-sm">{u.name}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">ID: {u.id}</div>
+                      </td>
+
+                      <td className="py-4 px-5 font-mono text-slate-700 font-medium">
+                        {u.email}
+                      </td>
+
+                      <td className="py-4 px-5">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-extrabold text-[10px] bg-emerald-100 text-emerald-900 border border-emerald-300/60">
+                          <ShieldCheck className="w-3 h-3 text-emerald-700" /> Administrator
+                        </span>
+                      </td>
+
+                      <td className="py-4 px-5 text-slate-500 font-medium">
+                        {formatDate(u.createdAt)}
+                      </td>
+
+                      <td className="py-4 px-5">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveUser(u);
+                              setFormError("");
+                              setIsResetPasswordModalOpen(true);
+                            }}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>Reset Password</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveUser(u);
+                              setIsDeleteModalOpen(true);
+                            }}
+                            className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete Account (Master-gated)"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                      </div>
-                    </td>
-
-                    <td className="py-4 px-5 font-mono text-slate-700 font-medium">
-                      {u.email}
-                    </td>
-
-                    <td className="py-4 px-5">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-extrabold text-[10px] bg-emerald-100 text-emerald-900 border border-emerald-300/60">
-                        <ShieldCheck className="w-3 h-3 text-emerald-700" /> Administrator
-                      </span>
-                    </td>
-
-                    <td className="py-4 px-5 text-slate-500 font-medium">
-                      {formatDate(u.createdAt)}
-                    </td>
-
-                    <td className="py-4 px-5">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveUser(u);
-                            setFormError("");
-                            setIsResetPasswordModalOpen(true);
-                          }}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
-                        >
-                          <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>Reset Password</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveUser(u);
-                            setIsDeleteModalOpen(true);
-                          }}
-                          className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Delete Account (Master-gated)"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
