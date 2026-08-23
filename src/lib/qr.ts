@@ -1,8 +1,8 @@
 import { normalizeScannedCode } from "./format";
 
 /**
- * Project Nayuki Standard QR Code Generator (Public Domain)
- * 100% ISO/IEC 18004 Standard Compliant QR Matrix Engine
+ * Standard ISO/IEC 18004 Compliant QR Code Matrix Generator
+ * Public Domain / Zero-Dependency Pure TypeScript Implementation
  */
 
 export type QrEcc = "L" | "M" | "Q" | "H";
@@ -20,14 +20,35 @@ export class QrSegment {
 
   public static makeBytes(data: Uint8Array | number[]): QrSegment {
     const bb: number[] = [];
-    for (const b of data) {
-      for (let i = 7; i >= 0; i--) {
-        bb.push((b >>> i) & 1);
+    for (let i = 0; i < data.length; i++) {
+      const b = data[i];
+      for (let j = 7; j >= 0; j--) {
+        bb.push((b >>> j) & 1);
       }
     }
     return new QrSegment("BYTE", data.length, bb);
   }
 }
+
+const ECC_PER_BLOCK_STR =
+  "-1,7,10,15,20,26,18,20,24,30,18,20,24,26,30,22,24,28,30,28,28,28,28,30,30,26,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30;" +
+  "-1,10,16,26,18,24,16,18,22,22,26,30,22,22,24,24,28,28,26,26,26,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28;" +
+  "-1,13,22,18,26,18,24,18,22,20,24,28,26,24,20,30,24,28,28,26,30,28,30,30,30,30,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30;" +
+  "-1,17,28,22,16,22,28,26,26,24,28,24,28,22,24,24,30,28,28,26,28,30,24,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30";
+
+const NUM_BLOCKS_STR =
+  "-1,1,1,1,1,1,2,2,2,2,4,4,4,4,4,6,6,6,6,7,8,8,9,9,10,12,12,12,13,14,15,16,17,18,19,19,20,21,22,24,25;" +
+  "-1,1,1,1,2,2,4,4,4,5,5,5,8,9,9,10,10,11,13,14,16,17,17,18,20,21,23,25,26,28,29,31,33,35,37,38,40,43,45,47,49;" +
+  "-1,1,1,2,2,4,4,6,6,8,8,8,10,12,16,12,17,16,18,21,20,23,23,25,27,29,34,34,35,38,40,43,45,48,51,53,56,59,62,65,68;" +
+  "-1,1,1,2,4,4,4,5,6,8,8,11,11,16,16,18,16,19,21,25,25,25,34,30,32,35,37,40,42,45,48,51,54,57,60,63,66,70,74,77,81";
+
+const ECC_CODEWORDS_TABLE: number[][] = ECC_PER_BLOCK_STR.split(";").map((row) =>
+  row.split(",").map((v) => parseInt(v, 10))
+);
+
+const NUM_BLOCKS_TABLE: number[][] = NUM_BLOCKS_STR.split(";").map((row) =>
+  row.split(",").map((v) => parseInt(v, 10))
+);
 
 export class QrCode {
   public readonly version: number;
@@ -36,19 +57,6 @@ export class QrCode {
   public readonly mask: number;
   private readonly modules: boolean[][];
   private readonly isFunction: boolean[][];
-
-  private static readonly ECC_CODEWORDS_PER_BLOCK: number[][] = [
-    [-1,  7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30], // L
-    [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28], // M
-    [-1, 13, 22, 18, 26, 18, 24, 18, 22, 20, 24, 28, 26, 24, 20, 30, 24, 28, 28, 26, 30, 28, 30, 30, 30, 30, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30], // Q
-    [-1, 17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30], // H
-  ];
-
-  private static readonly NUM_ERROR_CORRECTION_BLOCKS: number[][] =,
-   ,
-   ,
-   ,
-  ];
 
   constructor(version: number, ecl: QrEcc, dataCodewords: number[], mask: number) {
     this.version = version;
@@ -64,7 +72,7 @@ export class QrCode {
     this.drawCodewords(allCodewords);
 
     if (mask === -1) {
-      let minPenalty = 1e9;
+      let minPenalty = 1000000000;
       let bestMask = 0;
       for (let m = 0; m < 8; m++) {
         this.applyMask(m);
@@ -182,8 +190,8 @@ export class QrCode {
 
   private addErrorCorrection(data: number[]): number[] {
     const eclIndex = this.errorCorrectionLevel === "L" ? 0 : this.errorCorrectionLevel === "M" ? 1 : this.errorCorrectionLevel === "Q" ? 2 : 3;
-    const numBlocks = QrCode.NUM_ERROR_CORRECTION_BLOCKS[eclIndex][this.version];
-    const blockEccLen = QrCode.ECC_CODEWORDS_PER_BLOCK[eclIndex][this.version];
+    const numBlocks = NUM_BLOCKS_TABLE[eclIndex][this.version];
+    const blockEccLen = ECC_CODEWORDS_TABLE[eclIndex][this.version];
     const rawCodewords = Math.floor(QrCode.getNumRawDataModules(this.version) / 8);
     const numShortBlocks = numBlocks - (rawCodewords % numBlocks);
     const shortBlockLen = Math.floor(rawCodewords / numBlocks);
@@ -232,12 +240,12 @@ export class QrCode {
 
   private static reedSolomonComputeRemainder(data: number[], divisor: number[]): number[] {
     const result = divisor.map(() => 0);
-    for (const b of data) {
-      const factor = b ^ (result.shift() as number);
+    for (let i = 0; i < data.length; i++) {
+      const factor = data[i] ^ (result.shift() as number);
       result.push(0);
-      divisor.forEach((coef, i) => {
-        result[i] ^= QrCode.reedSolomonMultiply(coef, factor);
-      });
+      for (let j = 0; j < divisor.length; j++) {
+        result[j] ^= QrCode.reedSolomonMultiply(divisor[j], factor);
+      }
     }
     return result;
   }
@@ -319,7 +327,7 @@ export class QrCode {
 
     for (let v = 1; v <= 40; v++) {
       const rawCodewords = Math.floor(QrCode.getNumRawDataModules(v) / 8);
-      const eccLen = QrCode.ECC_CODEWORDS_PER_BLOCK[eclIdx][v] * QrCode.NUM_ERROR_CORRECTION_BLOCKS[eclIdx][v];
+      const eccLen = ECC_CODEWORDS_TABLE[eclIdx][v] * NUM_BLOCKS_TABLE[eclIdx][v];
       const dataCap = (rawCodewords - eccLen) * 8;
       const countBits = v <= 9 ? 8 : 16;
       const totalBitsNeeded = 4 + countBits + seg.bitData.length;
@@ -336,7 +344,9 @@ export class QrCode {
     for (let i = countBits - 1; i >= 0; i--) {
       bb.push((seg.numChars >>> i) & 1);
     }
-    for (const b of seg.bitData) bb.push(b);
+    for (let i = 0; i < seg.bitData.length; i++) {
+      bb.push(seg.bitData[i]);
+    }
 
     const termLen = Math.min(4, dataCapacityBits - bb.length);
     for (let i = 0; i < termLen; i++) bb.push(0);
