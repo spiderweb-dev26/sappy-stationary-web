@@ -2,6 +2,15 @@ import { getServerSession } from "next-auth/next";
 import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "./core";
+import {
+  firestore,
+  isFirebaseConfigured,
+  collection,
+  getDocs,
+  query,
+  where,
+} from "./firebase";
+import { User } from "./types";
 
 if (!process.env.NEXTAUTH_URL) {
   if (process.env.VERCEL_URL) {
@@ -20,19 +29,59 @@ export const authOptions: AuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        db.ensureSchema();
-        if (!credentials?.email || !credentials?.password) return null;
-
-        const email = credentials.email.toLowerCase().trim();
-        const user = db.users.find((u) => u.email.toLowerCase() === email);
-
-        if (!user) {
-          return null; // Reject unknown users
+        if (!credentials?.email || !credentials?.password) {
+          return null;
         }
 
-        // Verify password
-        if (user.password && user.password !== credentials.password) {
-          return null; // Reject incorrect passwords
+        const cleanEmail = credentials.email.toLowerCase().trim();
+        const inputPassword = credentials.password.trim();
+
+        // 1. Direct Real-Time Firestore Authentication
+        if (isFirebaseConfigured && firestore) {
+          try {
+            const q = query(
+              collection(firestore, "users"),
+              where("email", "==", cleanEmail)
+            );
+            const querySnap = await getDocs(q);
+
+            if (querySnap.empty) {
+              // User NOT registered in Firestore - REJECT
+              return null;
+            }
+
+            const userDoc = querySnap.docs[0].data() as User;
+
+            // Strict password check
+            if (!userDoc.password || userDoc.password !== inputPassword) {
+              // Incorrect password - REJECT
+              return null;
+            }
+
+            return {
+              id: userDoc.id,
+              name: userDoc.name,
+              email: userDoc.email,
+              role: userDoc.role || "ADMIN",
+            };
+          } catch (err) {
+            console.error("Firestore auth query error:", err);
+          }
+        }
+
+        // 2. Memory Store Fallback Authentication
+        db.ensureSchema();
+        const user = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+
+        if (!user) {
+          // User NOT found - REJECT
+          return null;
+        }
+
+        // Strict password check
+        if (!user.password || user.password !== inputPassword) {
+          // Incorrect password - REJECT
+          return null;
         }
 
         return {
@@ -62,7 +111,7 @@ export const authOptions: AuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 7 * 24 * 60 * 60, // 7 days session
+    maxAge: 7 * 24 * 60 * 60, // 7 days
   },
   secret: process.env.NEXTAUTH_SECRET || "sappy-stationary-super-secret-key-2026",
   pages: {

@@ -16,7 +16,7 @@ export default function MasterModal({
   isOpen,
   mode = "verify",
   title = "Master Authorization Required",
-  description = "This destructive operation is protected by the shop master password.",
+  description = "This destructive operation is protected by the shop master passcode.",
   onConfirm,
   onClose,
 }: MasterModalProps) {
@@ -38,12 +38,12 @@ export default function MasterModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password.trim()) {
-      setError("Please enter the master password.");
+      setError("Please enter the master passcode.");
       return;
     }
 
     if (isSettingMode && password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError("Passcodes do not match.");
       return;
     }
 
@@ -59,7 +59,7 @@ export default function MasterModal({
         });
         if (!res.ok) {
           const data = await res.json();
-          throw new Error(data.error || "Failed to set master password");
+          throw new Error(data.error || "Failed to set master passcode");
         }
       } else {
         const res = await fetch("/api/master/verify", {
@@ -69,7 +69,7 @@ export default function MasterModal({
         });
         if (!res.ok) {
           const data = await res.json();
-          throw new Error(data.error || "Invalid master password");
+          throw new Error(data.error || "Invalid master passcode");
         }
       }
 
@@ -94,7 +94,7 @@ export default function MasterModal({
             </div>
             <div>
               <h3 className="font-display font-black text-lg text-slate-900 leading-tight">
-                {isSettingMode ? "Set Master Password" : title}
+                {isSettingMode ? "Set Master Passcode" : title}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">{description}</p>
             </div>
@@ -107,14 +107,14 @@ export default function MasterModal({
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              {isSettingMode ? "New Master Password" : "Enter Master Password"}
+              {isSettingMode ? "New Master Passcode" : "Enter Master Passcode"}
             </label>
             <div className="relative">
               <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="password"
                 autoFocus
-                placeholder={isSettingMode ? "Enter new password (min 4 chars)" : "Master password (default: sappy2026)"}
+                placeholder={isSettingMode ? "Enter new passcode (min 4 chars)" : "Enter master passcode"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
@@ -125,13 +125,13 @@ export default function MasterModal({
           {isSettingMode && (
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Confirm Master Password
+                Confirm Master Passcode
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
-                  placeholder="Repeat master password"
+                  placeholder="Repeat master passcode"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
@@ -156,7 +156,7 @@ export default function MasterModal({
               className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl shadow-md shadow-emerald-700/20 disabled:opacity-50"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {isSettingMode ? "Set Password" : "Verify & Authorize"}
+              {isSettingMode ? "Set Passcode" : "Verify & Authorize"}
             </button>
           </div>
         </form>
