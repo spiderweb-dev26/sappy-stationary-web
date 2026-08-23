@@ -12,22 +12,21 @@ import {
   Firestore,
 } from "firebase/firestore";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDummyKeyForFallback",
+export const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDmDsBd75lv0ezgJtlYcjqyI72ZyYkSGTo",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "sappy-stationary.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "sappy-stationary.appspot.com",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "123456789",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:123456789:web:abcdef",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "sappy-stationary",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "sappy-stationary.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "62115526038",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:62115526038:web:7d8a75aa099d783c1859b7",
+  measurementId: "G-7J7HNRZVEV",
 };
 
-export const isFirebaseConfigured = Boolean(
-  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID
-);
+export const isFirebaseConfigured = true;
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-export const firestore: Firestore | null = isFirebaseConfigured ? getFirestore(app) : null;
+export const firestore: Firestore = getFirestore(app);
 
 export {
   collection,
