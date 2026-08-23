@@ -1,97 +1,90 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, withRetry } from "@/lib/core";
+import { db } from "@/lib/core";
 import { getAuthSession } from "@/lib/auth";
+import {
+  firestore,
+  isFirebaseConfigured,
+  collection,
+  getDocs,
+  withFirestoreTimeout,
+} from "@/lib/firebase";
+import { User } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withRetry(async () => {
-    db.ensureSchema();
+export async function GET() {
+  try {
+    if (typeof db.ensureSchema === "function") {
+      db.ensureSchema();
+    }
+
     const session = await getAuthSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
     }
 
-    const { id } = await params;
-    const body = await req.json().catch(() => ({}));
-    const { masterPassword } = body;
+    let userList: User[] = [];
 
-    if (
-      !masterPassword ||
-      (typeof db.verifyMasterPassword === "function"
-        ? !db.verifyMasterPassword(masterPassword)
-        : masterPassword !== "sappy2026")
-    ) {
-      return NextResponse.json(
-        { error: "Invalid master password. Authorization rejected." },
-        { status: 403 }
-      );
+    // 1. Fetch live from Firestore
+    if (isFirebaseConfigured && firestore) {
+      try {
+        const querySnap = await withFirestoreTimeout(
+          getDocs(collection(firestore, "users")),
+          2500
+        );
+        if (!querySnap.empty) {
+          userList = querySnap.docs.map((d) => d.data() as User);
+        }
+      } catch (err) {
+        console.warn("Firestore fetch users warning:", err);
+      }
     }
 
-    const userIndex = db.users.findIndex((u) => u.id === id);
-    if (userIndex === -1) {
-      return NextResponse.json({ error: "User account not found." }, { status: 404 });
+    // 2. Memory store check
+    if (Array.isArray(db.users) && db.users.length > 0) {
+      db.users.forEach((u) => {
+        if (!userList.some((existing) => existing.email.toLowerCase() === u.email.toLowerCase())) {
+          userList.push(u);
+        }
+      });
     }
 
-    const deleted = db.users.splice(userIndex, 1)[0];
-    if (typeof db.logActivity === "function") {
-      db.logActivity("USER_DELETE", `Administrator account removed: ${deleted.name} (${deleted.email})`, session.user);
+    // 3. Current active session user inclusion
+    if (userList.length === 0 && session.user) {
+      const activeUser: User = {
+        id: (session.user as any).id || "usr-active",
+        name: session.user.name || "Amanueal Getahun",
+        email: session.user.email || "amanuealhailu007@gmail.com",
+        role: (session.user as any).role || "ADMIN",
+        createdAt: new Date(),
+      };
+      userList.push(activeUser);
+      db.users.push(activeUser);
     }
 
-    return NextResponse.json({ success: true, deleted });
-  });
-}
-
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withRetry(async () => {
-    db.ensureSchema();
-    const session = await getAuthSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
-    }
-
-    const { id } = await params;
-    const body = await req.json().catch(() => ({}));
-    const { newPassword, masterPassword } = body;
-
-    if (
-      !masterPassword ||
-      (typeof db.verifyMasterPassword === "function"
-        ? !db.verifyMasterPassword(masterPassword)
-        : masterPassword !== "sappy2026")
-    ) {
-      return NextResponse.json(
-        { error: "Invalid master password. Authorization rejected." },
-        { status: 403 }
-      );
-    }
-
-    if (!newPassword || newPassword.length < 4) {
-      return NextResponse.json(
-        { error: "New password must be at least 4 characters long." },
-        { status: 400 }
-      );
-    }
-
-    const user = db.users.find((u) => u.id === id);
-    if (!user) {
-      return NextResponse.json({ error: "User account not found." }, { status: 404 });
-    }
-
-    user.password = newPassword;
-    if (typeof db.logActivity === "function") {
-      db.logActivity("PASSWORD_RESET", `Password reset for user: ${user.name} (${user.email})`, session.user);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Password for ${user.name} successfully updated.`,
+    // Deduplicate by email
+    const seen = new Set<string>();
+    const uniqueUsers: User[] = [];
+    userList.forEach((u) => {
+      const em = (u.email || "").toLowerCase().trim();
+      if (em && !seen.has(em)) {
+        seen.add(em);
+        uniqueUsers.push({
+          id: u.id || `usr-${Date.now()}`,
+          name: u.name || "Administrator",
+          email: em,
+          role: u.role || "ADMIN",
+          createdAt: u.createdAt || new Date(),
+        });
+      }
     });
-  });
+
+    return NextResponse.json(uniqueUsers);
+  } catch (err: any) {
+    console.error("GET /api/users error:", err);
+    return NextResponse.json(
+      { error: err.message || "Failed to fetch users" },
+      { status: 500 }
+    );
+  }
 }

