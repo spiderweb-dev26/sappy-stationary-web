@@ -2,7 +2,7 @@
   "name": "sappy-stationary",
   "version": "2.1.0",
   "private": true,
-  "description": "Sappy Stationary - Multi-User Shared Inventory & POS System with Barcode Engine",
+  "description": "Sappy Stationary - Multi-User Shared Inventory & POS System with QR Label Engine",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,6 +13,7 @@
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
+    "firebase": "^11.0.2",
     "framer-motion": "^11.11.17",
     "html5-qrcode": "^2.3.8",
     "jsqr": "^1.4.0",
