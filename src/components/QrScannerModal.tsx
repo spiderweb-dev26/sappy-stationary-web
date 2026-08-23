@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Camera, X, RefreshCw, AlertCircle, Search, UploadCloud, FlipHorizontal } from "lucide-react";
+import {
+  Camera,
+  X,
+  AlertCircle,
+  Search,
+  UploadCloud,
+  FlipHorizontal,
+  Loader2,
+} from "lucide-react";
 import jsQR from "jsqr";
 import { normalizeScannedCode } from "@/lib/format";
 import { playScanBeep } from "@/lib/qr";
@@ -19,128 +27,150 @@ export default function QrScannerModal({
 }: QrScannerModalProps) {
   const [manualCode, setManualCode] = useState("");
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const animFrameRef = useRef<number | null>(null);
+  const animFrameIdRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      loadVideoDevices();
-      startCamera();
-    } else {
-      stopCamera();
+    if (!isOpen) {
+      stopCameraStream();
+      return;
     }
-    return () => stopCamera();
-  }, [isOpen, selectedDeviceId]);
 
-  const loadVideoDevices = async () => {
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices.filter((d) => d.kind === "videoinput");
-        setVideoDevices(videoInputs);
-        if (videoInputs.length > 0 && !selectedDeviceId) {
-          setSelectedDeviceId(videoInputs[0].deviceId);
+    let isSubscribed = true;
+    setIsInitializing(true);
+    setCameraError(null);
+
+    const initCamera = async () => {
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoInputs = devices.filter((d) => d.kind === "videoinput");
+          if (isSubscribed && videoInputs.length > 0) {
+            setVideoDevices(videoInputs);
+            if (!selectedDeviceId) {
+              const backCam = videoInputs.find((d) =>
+                d.label.toLowerCase().includes("back") ||
+                d.label.toLowerCase().includes("rear") ||
+                d.label.toLowerCase().includes("environment")
+              );
+              setSelectedDeviceId(backCam ? backCam.deviceId : videoInputs[0].deviceId);
+            }
+          }
+        }
+
+        const constraints: MediaStreamConstraints = {
+          video: selectedDeviceId
+            ? { deviceId: { exact: selectedDeviceId } }
+            : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        };
+
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (e) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+
+        if (!isSubscribed) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.setAttribute("playsinline", "true");
+          videoRef.current.muted = true;
+          
+          await videoRef.current.play().catch(() => {});
+          setIsInitializing(false);
+
+          if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+          animFrameIdRef.current = requestAnimationFrame(scanVideoFrame);
+        }
+      } catch (err: any) {
+        if (isSubscribed) {
+          setCameraError(
+            "Camera permission denied or camera not available. You can enter the serial below or upload a QR image."
+          );
+          setIsInitializing(false);
         }
       }
-    } catch (e) {}
-  };
+    };
 
-  const startCamera = async () => {
-    setCameraError(null);
-    setIsScanning(true);
+    initCamera();
 
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
+    return () => {
+      isSubscribed = false;
+      stopCameraStream();
+    };
+  }, [isOpen, selectedDeviceId]);
 
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Camera API not supported. Use manual entry or upload.");
-      }
-
-      let constraints: MediaStreamConstraints = {
-        video: selectedDeviceId
-          ? { deviceId: { exact: selectedDeviceId } }
-          : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-      };
-
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (firstErr) {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      }
-
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("playsinline", "true");
-        videoRef.current.muted = true;
-        await videoRef.current.play();
-        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-        animFrameRef.current = requestAnimationFrame(tick);
-      }
-    } catch (err: any) {
-      setCameraError(err.message || "Camera access denied. Enter the serial below or upload an image.");
-      setIsScanning(false);
-    }
-  };
-
-  const stopCamera = () => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
+  const stopCameraStream = () => {
+    if (animFrameIdRef.current) {
+      cancelAnimationFrame(animFrameIdRef.current);
+      animFrameIdRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    setIsScanning(false);
   };
 
-  const tick = () => {
+  const scanVideoFrame = () => {
     if (!isOpen) return;
 
-    if (videoRef.current && videoRef.current.readyState >= 2) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (canvas && video.videoWidth > 0 && video.videoHeight > 0) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (video && video.readyState >= 2 && canvas) {
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      if (vw > 0 && vh > 0) {
+        canvas.width = vw;
+        canvas.height = vh;
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
         if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(video, 0, 0, vw, vh);
+          const imageData = ctx.getImageData(0, 0, vw, vh);
           
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
             inversionAttempts: "attemptBoth",
           });
 
-          if (code && code.data && code.data.trim()) {
-            const normalized = normalizeScannedCode(code.data);
-            if (normalized) {
-              playScanBeep();
-              onScan(normalized);
-              stopCamera();
-              onClose();
+          if (qrCode && qrCode.data && qrCode.data.trim()) {
+            const clean = normalizeScannedCode(qrCode.data);
+            if (clean) {
+              handleSuccessfulScan(clean);
               return;
             }
           }
         }
       }
     }
-    animFrameRef.current = requestAnimationFrame(tick);
+
+    animFrameIdRef.current = requestAnimationFrame(scanVideoFrame);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSuccessfulScan = (code: string) => {
+    playScanBeep();
+    stopCameraStream();
+    onScan(code);
+    onClose();
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -155,21 +185,18 @@ export default function QrScannerModal({
         if (ctx) {
           ctx.drawImage(img, 0, 0, img.width, img.height);
           const imageData = ctx.getImageData(0, 0, img.width, img.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
             inversionAttempts: "attemptBoth",
           });
-          if (code && code.data) {
-            const normalized = normalizeScannedCode(code.data);
-            if (normalized) {
-              playScanBeep();
-              onScan(normalized);
-              stopCamera();
-              onClose();
+          if (qrCode && qrCode.data) {
+            const clean = normalizeScannedCode(qrCode.data);
+            if (clean) {
+              handleSuccessfulScan(clean);
               return;
             }
           }
         }
-        alert("No QR code detected in the uploaded image.");
+        alert("No QR code found in the uploaded image. Please try a clearer picture.");
       };
       img.src = event.target?.result as string;
     };
@@ -178,13 +205,10 @@ export default function QrScannerModal({
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const normalized = normalizeScannedCode(manualCode);
-    if (normalized) {
-      playScanBeep();
-      onScan(normalized);
+    const clean = normalizeScannedCode(manualCode);
+    if (clean) {
+      handleSuccessfulScan(clean);
       setManualCode("");
-      stopCamera();
-      onClose();
     }
   };
 
@@ -192,7 +216,7 @@ export default function QrScannerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-200 animate-scale-up space-y-4">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-7 border border-slate-200 animate-scale-up space-y-4">
         <div className="flex items-start justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
@@ -200,16 +224,16 @@ export default function QrScannerModal({
             </div>
             <div>
               <h3 className="font-display font-black text-lg text-slate-900 leading-tight">
-                Scan Stationery QR Code
+                Scan Item QR Code
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Align the QR code within the frame or enter serial manually.
+                Align the 2D QR code inside the green target frame.
               </p>
             </div>
           </div>
           <button
             onClick={() => {
-              stopCamera();
+              stopCameraStream();
               onClose();
             }}
             className="text-slate-400 hover:text-slate-600 p-1 rounded-xl hover:bg-slate-100"
@@ -220,71 +244,71 @@ export default function QrScannerModal({
 
         {videoDevices.length > 1 && (
           <div className="flex items-center gap-2">
-            <FlipHorizontal className="w-4 h-4 text-slate-400" />
+            <FlipHorizontal className="w-4 h-4 text-slate-400 shrink-0" />
             <select
               value={selectedDeviceId}
               onChange={(e) => setSelectedDeviceId(e.target.value)}
-              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
             >
-              {videoDevices.map((d, i) => (
-                <option key={d.deviceId || i} value={d.deviceId}>
-                  {d.label || `Camera ${i + 1}`}
+              {videoDevices.map((c) => (
+                <option key={c.deviceId} value={c.deviceId}>
+                  {c.label || `Camera ${c.deviceId.slice(0, 5)}`}
                 </option>
               ))}
             </select>
           </div>
         )}
 
-        <div className="relative w-full h-60 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-800">
-          {cameraError ? (
-            <div className="p-4 text-center text-slate-300 text-xs space-y-2">
-              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-              <p>{cameraError}</p>
-              <button
-                type="button"
-                onClick={startCamera}
-                className="px-3 py-1.5 bg-emerald-700 text-white font-bold rounded-xl text-xs"
-              >
-                Retry Camera
-              </button>
-            </div>
-          ) : (
-            <>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-              <canvas ref={canvasRef} className="hidden" />
+        <div className="relative w-full h-64 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-800 shadow-inner">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
+          <canvas ref={canvasRef} className="hidden" />
 
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                <div className="w-44 h-44 border-2 border-emerald-400 rounded-2xl bg-emerald-400/10 relative overflow-hidden shadow-[0_0_20px_rgba(52,211,153,0.4)]">
-                  <div className="w-full h-0.5 bg-emerald-300 shadow-[0_0_8px_#34d399] absolute top-0 animate-[bounce_2s_infinite]" />
-                </div>
+          {!cameraError && !isInitializing && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="w-44 h-44 border-2 border-emerald-400 rounded-2xl bg-emerald-400/10 relative overflow-hidden shadow-[0_0_25px_rgba(52,211,153,0.4)]">
+                <div className="w-full h-0.5 bg-emerald-300 shadow-[0_0_10px_#34d399] absolute top-0 animate-[bounce_2s_infinite]" />
               </div>
-            </>
+            </div>
+          )}
+
+          {isInitializing && !cameraError && (
+            <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center text-white gap-2 text-xs">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+              <p className="font-bold">Starting camera...</p>
+            </div>
+          )}
+
+          {cameraError && (
+            <div className="absolute inset-0 p-5 bg-slate-900 flex flex-col items-center justify-center text-center text-xs text-slate-300 space-y-2">
+              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+              <p className="leading-relaxed">{cameraError}</p>
+            </div>
           )}
         </div>
 
         <div className="space-y-3 pt-1">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between text-xs">
             <span className="text-[11px] font-bold text-slate-400 uppercase">Or Scan From Photo:</span>
             <input
               type="file"
               accept="image/*"
               ref={fileInputRef}
-              onChange={handleImageUpload}
+              onChange={handleFileUpload}
               className="hidden"
             />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
+              className="flex items-center gap-1 font-bold text-emerald-700 hover:underline"
             >
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>Upload QR Image</span>
+              <UploadCloud className="w-4 h-4" />
+              <span>Choose QR Photo</span>
             </button>
           </div>
 
@@ -293,7 +317,7 @@ export default function QrScannerModal({
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="e.g. SL-26-P0101"
+                placeholder="Enter serial manually (e.g. SL-26-P0101)"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
                 className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"

@@ -1,31 +1,32 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { InventoryItem, Sale } from "./types";
-import { drawBarcodeJsPdf } from "./barcode";
+import { InventoryItem, Sale, QrGridPreset } from "./types";
+import { drawQrJsPdf } from "./qr";
 import { formatCurrency, formatDate, formatDateTime } from "./format";
 import { SAPPY_LOGO_BASE64 } from "./logoData";
 
 export function parseGridPreset(grid: string): { cols: number; rows: number } {
-  const parts = (grid || "3x8").toLowerCase().split("x");
-  const cols = parseInt(parts[0], 10) || 3;
-  const rows = parseInt(parts, 10) || 8;
+  const parts = (grid || "4x3").toLowerCase().split("x");
+  const cols = parseInt(parts[0], 10) || 4;
+  const rows = parseInt(parts, 10) || 3;
   return { cols, rows };
 }
 
 /**
- * Generates an A4 Portrait Barcode Label Sheet PDF
+ * Generates an A4 Portrait 2D QR Label Sheet PDF (2x2 to 12x12)
+ * Perfectly proportional square 2D QR code in every sticker cell.
  */
-export function generateBarcodeSheetPdf(
+export function generateQrSheetPdf(
   items: InventoryItem[],
   options: { grid?: string; repeatCount?: number } = {}
 ): jsPDF {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
-    format: "a4",
+    format: "a4", // 210 x 297 mm
   });
 
-  const grid = options.grid || "3x8";
+  const grid = options.grid || "4x3";
   const { cols, rows } = parseGridPreset(grid);
   const pageWidth = 210;
   const pageHeight = 297;
@@ -55,60 +56,83 @@ export function generateBarcodeSheetPdf(
       const cellX = marginX + colIdx * cellWidth;
       const cellY = marginTop + rowIdx * cellHeight;
 
-      const padding = 2;
+      const padding = Math.max(1, Math.min(2.5, cellWidth * 0.04));
       const innerW = cellWidth - padding * 2;
       const innerH = cellHeight - padding * 2;
       const innerX = cellX + padding;
       const innerY = cellY + padding;
 
-      // 1. Draw rounded sticker frame / scissor guide
-      doc.setDrawColor(203, 213, 225);
+      // 1. Draw rounded boundary frame
+      doc.setDrawColor(203, 213, 225); // slate-300
       doc.setLineWidth(0.25);
-      doc.setFillColor(254, 252, 246);
-      doc.roundedRect(innerX, innerY, innerW, innerH, 2, 2, "FD");
+      doc.setFillColor(254, 252, 246); // warm cream
+      const cornerRadius = Math.max(1, Math.min(2.5, cellWidth * 0.05));
+      doc.roundedRect(innerX, innerY, innerW, innerH, cornerRadius, cornerRadius, "FD");
 
-      // 2. Shop Logo top-right
-      const logoSize = Math.min(innerW * 0.18, 7.5);
-      const logoX = innerX + innerW - logoSize - 1.5;
-      const logoY = innerY + 1.5;
+      const isCompact = cols >= 6 || rows >= 6;
+      const isUltraCompact = cols >= 9 || rows >= 9;
 
-      try {
-        if (SAPPY_LOGO_BASE64) {
-          doc.addImage(SAPPY_LOGO_BASE64, "PNG", logoX, logoY, logoSize, logoSize);
+      // 2. Header Area: Logo, Title & Price
+      const logoSize = isUltraCompact ? 0 : isCompact ? Math.min(innerW * 0.2, 5) : Math.min(innerW * 0.22, 8);
+      const headerTop = innerY + 1.5;
+
+      if (logoSize > 0) {
+        try {
+          if (SAPPY_LOGO_BASE64) {
+            doc.addImage(SAPPY_LOGO_BASE64, "PNG", innerX + innerW - logoSize - 1, headerTop, logoSize, logoSize);
+          }
+        } catch (e) {}
+      }
+
+      // Title & Price text
+      const textMaxW = logoSize > 0 ? innerW - logoSize - 2.5 : innerW - 2;
+      let textBottom = headerTop;
+
+      if (!isUltraCompact) {
+        const titleSize = isCompact ? 4.5 : Math.min(7.5, cellWidth * 0.15);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(titleSize);
+        doc.setTextColor(15, 23, 42); // slate-900
+
+        const lines = doc.splitTextToSize(item.name || "Stationery Item", textMaxW);
+        const displayLines = lines.slice(0, isCompact ? 1 : 2);
+        
+        displayLines.forEach((line: string) => {
+          doc.text(line, innerX + 1.5, textBottom + titleSize * 0.35);
+          textBottom += titleSize * 0.35 + 0.6;
+        });
+
+        if (item.sellingPrice > 0) {
+          const priceSize = isCompact ? 4 : Math.min(6.5, cellWidth * 0.13);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(priceSize);
+          doc.setTextColor(4, 120, 87); // emerald-700
+          doc.text(formatCurrency(item.sellingPrice), innerX + 1.5, textBottom + priceSize * 0.35);
+          textBottom += priceSize * 0.35 + 1.2;
         }
-      } catch (e) {}
+      }
 
-      // 3. Item Name & Price badge
+      // 3. Perfect Centered Square 2D QR Code (1:1 Ratio)
+      const reservedBottom = isUltraCompact ? 3.5 : isCompact ? 5.5 : 8;
+      const availableQrH = innerH - (textBottom - innerY) - reservedBottom;
+      const availableQrW = innerW - 3;
+      
+      const qrSize = Math.max(5, Math.min(availableQrW, availableQrH, 42));
+
+      const qrX = innerX + (innerW - qrSize) / 2;
+      const qrY = textBottom + Math.max(0.5, (availableQrH - qrSize) / 2);
+
+      const serialToEncode = item.serial || item.sku || `SL-26-${item.id.slice(-5).toUpperCase()}`;
+      drawQrJsPdf(doc, serialToEncode, qrX, qrY, qrSize);
+
+      // 4. Monospace Serial Code Below QR
+      const serialFontSize = isUltraCompact ? 3.5 : isCompact ? 4.5 : Math.min(7, cellWidth * 0.13);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(Math.min(8, cellWidth * 0.14));
-      doc.setTextColor(15, 23, 42);
-
-      const maxTitleW = innerW - logoSize - 3;
-      const lines = doc.splitTextToSize(item.name || "Stationery Item", maxTitleW);
-      const displayLines = lines.slice(0, 2);
-
-      let currentY = innerY + 4;
-      displayLines.forEach((l: string) => {
-        doc.text(l, innerX + 2, currentY);
-        currentY += 3.2;
-      });
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(4, 120, 87);
-      doc.text(formatCurrency(item.sellingPrice), innerX + 2, currentY + 1);
-
-      // 4. 1D Vector Code 128 Barcode
-      const serialToEncode = item.serial || item.sku || "SL-26-00000";
-      const barcodeW = innerW - 4;
-      const barcodeH = Math.max(10, innerH - (currentY - innerY) - 5);
-      const barcodeX = innerX + 2;
-      const barcodeY = innerY + innerH - barcodeH - 1.5;
-
-      drawBarcodeJsPdf(doc, serialToEncode, barcodeX, barcodeY, barcodeW, barcodeH, {
-        showText: true,
-        fontSize: Math.min(7, cellWidth * 0.12),
-      });
+      doc.setFontSize(serialFontSize);
+      doc.setTextColor(4, 120, 87); // emerald-700
+      
+      const serialY = Math.min(innerY + innerH - 1, qrY + qrSize + serialFontSize * 0.4 + 1);
+      doc.text(serialToEncode, innerX + innerW / 2, serialY, { align: "center" });
     });
 
     // 5. Branded Footer Line
@@ -119,15 +143,14 @@ export function generateBarcodeSheetPdf(
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    const footerText = `Sappy Stationary * Barcode Sheet (${cols}x${rows}) * Items: ${items.length} * Page ${p + 1} of ${totalPages} * Date: ${new Date().toLocaleDateString()}`;
+    const footerText = `Sappy Stationary * 2D QR Code Sheet (${cols}x${rows}) * Total Labels: ${items.length} * Page ${p + 1} of ${totalPages}`;
     doc.text(footerText, pageWidth / 2, pageHeight - 5.5, { align: "center" });
   }
 
   return doc;
 }
 
-// Backward compatibility alias for QR sheet routes
-export { generateBarcodeSheetPdf as generateQrSheetPdf };
+export { generateQrSheetPdf as generateBarcodeSheetPdf };
 
 /**
  * Generates Landscape Inventory Ledger PDF
@@ -198,7 +221,7 @@ export function generateInventoryLedgerPdf(
     startY: 28,
     margin: { left: 12, right: 12, bottom: 18 },
     head: [
-      ["#", "Barcode Serial", "Item Name", "Category", "Qty", "Unit", "Cost Price", "Selling Price", "Retail Value", "Location"]
+      ["#", "QR Serial", "Item Name", "Category", "Qty", "Unit", "Cost (ETB)", "Selling (ETB)", "Stock Value", "Location"]
     ],
     body: tableData,
     foot: [
@@ -256,7 +279,7 @@ export function generateInventoryLedgerPdf(
 }
 
 /**
- * Generates thermal sales receipt with barcode
+ * Generates thermal sales receipt with 2D QR code
  */
 export function generateReceiptPdf(sale: Sale, storeName: string = "Sappy Stationary"): jsPDF {
   const doc = new jsPDF({
@@ -301,7 +324,7 @@ export function generateReceiptPdf(sale: Sale, storeName: string = "Sappy Statio
   doc.setFontSize(7.5);
 
   sale.items.forEach((line) => {
-    const name = line.item?.name || "Stationery Item";
+    const name = line.item?.name || line.itemName || "Stationery Item";
     const shortName = name.length > 20 ? name.substring(0, 18) + "..." : name;
     doc.text(shortName, 6, y);
     doc.text(`${line.quantity} x ${line.unitPrice.toFixed(2)}`, 45, y);
@@ -333,14 +356,10 @@ export function generateReceiptPdf(sale: Sale, storeName: string = "Sappy Statio
   }
 
   y += 6;
-  const barcodeW = 56;
-  const barcodeH = 14;
-  drawBarcodeJsPdf(doc, sale.receiptNo, (pw - barcodeW) / 2, y, barcodeW, barcodeH, {
-    showText: true,
-    fontSize: 7,
-  });
+  const qrSize = 22;
+  drawQrJsPdf(doc, sale.receiptNo, (pw - qrSize) / 2, y, qrSize);
   
-  y += barcodeH + 4;
+  y += qrSize + 4;
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
   doc.text("Thank you for shopping at Sappy Stationary!", pw / 2, y, { align: "center" });
