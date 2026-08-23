@@ -19,12 +19,18 @@ import {
   PackageCheck,
   HelpCircle,
   Eye,
+  BookOpen,
+  CheckSquare,
+  Square,
+  TrendingUp,
+  User,
 } from "lucide-react";
 import { InventoryItem, InventoryKpis } from "@/lib/types";
 import { formatCurrency, formatDate, generateAutoSerial, normalizeItemName } from "@/lib/format";
 import BarcodeSheetModal from "@/components/BarcodeSheetModal";
 import SingleBarcodeModal from "@/components/SingleBarcodeModal";
 import ImportModal from "@/components/ImportModal";
+import ImportGuideModal from "@/components/ImportGuideModal";
 import MasterModal from "@/components/MasterModal";
 
 export default function InventoryClient() {
@@ -45,12 +51,17 @@ export default function InventoryClient() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "duplicates">("all");
 
+  // Selection mode for bulk barcode labels
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isBarcodeSheetModalOpen, setIsBarcodeSheetModalOpen] = useState(false);
   const [isSingleBarcodeModalOpen, setIsSingleBarcodeModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
   const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
 
   // Active target items
@@ -58,7 +69,7 @@ export default function InventoryClient() {
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
-  // Add Item form state
+  // Add Item form state with live margin calculator
   const [formData, setFormData] = useState({
     name: "",
     category: "Writing Instruments",
@@ -110,6 +121,29 @@ export default function InventoryClient() {
   };
 
   const categories = ["ALL", "Writing Instruments", "Paper & Notebooks", "Desk & Office Tools", "School & Geometry", "Art & Drafting"];
+
+  // Live margin calculations
+  const addMargin = formData.sellingPrice - (formData.costUnknown ? 0 : formData.costPrice);
+  const addMarginPct = formData.sellingPrice > 0 ? (addMargin / formData.sellingPrice) * 100 : 0;
+
+  const editMargin = editingItem ? editingItem.sellingPrice - (editingItem.costUnknown ? 0 : editingItem.costPrice) : 0;
+  const editMarginPct = editingItem && editingItem.sellingPrice > 0 ? (editMargin / editingItem.sellingPrice) * 100 : 0;
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === items.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(items.map((i) => i.id));
+    }
+  };
+
+  const toggleSelectItem = (id: string) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter((x) => x !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
 
   const handleCreateItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,6 +267,20 @@ export default function InventoryClient() {
     }
   };
 
+  const handleKeepAllGroup = async (groupItems: InventoryItem[]) => {
+    try {
+      for (const it of groupItems) {
+        if (!it.dupKeptAt) {
+          await fetch(`/api/inventory/${it.id}/keep`, { method: "POST" });
+        }
+      }
+      showToast("All items in cluster marked as kept.");
+      fetchInventory();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleDeleteItem = async (password: string) => {
     if (!deletingItemId) return;
     try {
@@ -264,32 +312,25 @@ export default function InventoryClient() {
         </div>
       )}
 
-      {/* Top Header & Actions */}
+      {/* Header matching spec */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="font-display font-black text-2xl sm:text-3xl text-slate-900 tracking-tight flex items-center gap-3">
             <Boxes className="w-8 h-8 text-emerald-700" />
-            Stationery Inventory
+            Stock / Inventory
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Real-time stock catalog, Code 128 barcodes, sticker sheets, and duplicate tracking.
+            {items.length} item(s) in the shared catalog • Currency: ETB (Ethiopian Birr)
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={() => handleExport("excel")}
+            onClick={() => setIsGuideModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm transition-colors"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            Export Excel
-          </button>
-          <button
-            onClick={() => handleExport("pdf")}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm transition-colors"
-          >
-            <FileText className="w-3.5 h-3.5 text-emerald-700" />
-            PDF Ledger
+            <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+            Import Guide
           </button>
           <button
             onClick={() => setIsImportModalOpen(true)}
@@ -299,6 +340,20 @@ export default function InventoryClient() {
             Import Excel
           </button>
           <button
+            onClick={() => handleExport("excel")}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm transition-colors"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            Excel
+          </button>
+          <button
+            onClick={() => handleExport("pdf")}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5 text-emerald-700" />
+            PDF Ledger
+          </button>
+          <button
             onClick={() => {
               setActiveItem(null);
               setIsBarcodeSheetModalOpen(true);
@@ -306,7 +361,7 @@ export default function InventoryClient() {
             className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-xl shadow-sm transition-colors"
           >
             <Barcode className="w-4 h-4 text-mint-300" />
-            Batch Barcodes
+            {selectionMode && selectedIds.length > 0 ? `Labels (${selectedIds.length})` : "Label Sheets"}
           </button>
           <button
             onClick={() => setIsAddModalOpen(true)}
@@ -318,56 +373,56 @@ export default function InventoryClient() {
         </div>
       </div>
 
-      {/* KPI Cards Header */}
+      {/* KPI Ribbon */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Items in View</p>
             <p className="font-display font-black text-2xl text-slate-900 mt-1">{kpis.itemsInView}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
             <Boxes className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Units</p>
             <p className="font-display font-black text-2xl text-emerald-800 mt-1">{kpis.totalUnits.toLocaleString()}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-mint-50 text-mint-700 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-2xl bg-mint-50 text-mint-700 flex items-center justify-center font-bold">
             <PackageCheck className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Retail Stock Value</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Stock Value (ETB)</p>
             <p className="font-display font-black text-xl sm:text-2xl text-slate-900 mt-1">{formatCurrency(kpis.stockValue)}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
             <DollarSign className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Unknown Cost</p>
             <p className="font-display font-black text-2xl text-rose-700 mt-1">{kpis.unknownCostCount} items</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center font-bold">
             <HelpCircle className="w-5 h-5" />
           </div>
         </div>
       </div>
 
-      {/* Tabs & Search Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+      {/* Tabs & Toolbar */}
+      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab("all")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
                 activeTab === "all"
                   ? "bg-emerald-800 text-white shadow-sm"
                   : "bg-slate-100 hover:bg-slate-200 text-slate-600"
@@ -377,7 +432,7 @@ export default function InventoryClient() {
             </button>
             <button
               onClick={() => setActiveTab("duplicates")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              className={`px-4 py-2 rounded-2xl text-xs font-bold flex items-center gap-2 transition-all ${
                 activeTab === "duplicates"
                   ? "bg-emerald-800 text-white shadow-sm"
                   : "bg-slate-100 hover:bg-slate-200 text-slate-600"
@@ -386,30 +441,48 @@ export default function InventoryClient() {
               <Layers className="w-3.5 h-3.5" />
               <span>Duplicates</span>
               {unreviewedCount > 0 && (
-                <span className="px-2 py-0.5 text-[10px] rounded-full bg-rose-500 text-white font-extrabold">
+                <span className="px-2 py-0.5 text-[10px] rounded-full bg-rose-500 text-white font-extrabold animate-pulse">
                   {unreviewedCount}
                 </span>
               )}
             </button>
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 select-none">
-            <input
-              type="checkbox"
-              checked={lowStockOnly}
-              onChange={(e) => setLowStockOnly(e.target.checked)}
-              className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-            />
-            <span>Low Stock Alerts Only</span>
-          </label>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setSelectionMode(!selectionMode);
+                setSelectedIds([]);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                selectionMode
+                  ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+              }`}
+            >
+              {selectionMode ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+              <span>{selectionMode ? "Done Selecting" : "Select Mode"}</span>
+            </button>
+
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 select-none">
+              <input
+                type="checkbox"
+                checked={lowStockOnly}
+                onChange={(e) => setLowStockOnly(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+              />
+              <span>Low Stock Alerts</span>
+            </label>
+          </div>
         </div>
 
+        {/* Search & Category Filter */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="relative sm:col-span-2">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search by name, barcode serial (e.g. SL-26-P0101), category, shelf location..."
+              placeholder="Search by name, serial (e.g. SL-26-XXXXX), category, location..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
@@ -432,31 +505,41 @@ export default function InventoryClient() {
         </div>
       </div>
 
-      {/* Main Table View */}
+      {/* Main Content: Table or Duplicates */}
       {activeTab === "all" ? (
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
           {loading ? (
             <div className="p-12 flex flex-col items-center justify-center text-slate-400 gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-              <p className="text-xs font-medium">Loading stationery inventory...</p>
+              <p className="text-xs font-medium">Loading stationery catalog...</p>
             </div>
           ) : items.length === 0 ? (
             <div className="p-12 text-center text-slate-400">
               <Boxes className="w-12 h-12 mx-auto mb-3 opacity-40" />
               <p className="text-sm font-bold text-slate-700">No stationery items found</p>
-              <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or click "Add Item".</p>
+              <p className="text-xs text-slate-400 mt-1">Try adjusting search or click "Add Item".</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
                   <tr>
-                    <th className="py-3 px-4">Barcode Serial</th>
-                    <th className="py-3 px-4">Item Name</th>
+                    {selectionMode && (
+                      <th className="py-3 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.length === items.length && items.length > 0}
+                          onChange={toggleSelectAll}
+                          className="w-4 h-4 text-emerald-600 rounded"
+                        />
+                      </th>
+                    )}
+                    <th className="py-3 px-4">Item (Name & Flags)</th>
+                    <th className="py-3 px-4">Serial</th>
                     <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4 text-right">Stock Qty</th>
-                    <th className="py-3 px-4 text-right">Cost Price</th>
-                    <th className="py-3 px-4 text-right">Selling Price</th>
+                    <th className="py-3 px-4 text-right">Sell (ETB)</th>
+                    <th className="py-3 px-4 text-right">Cost (ETB)</th>
+                    <th className="py-3 px-4 text-right">Qty</th>
                     <th className="py-3 px-4">Location</th>
                     <th className="py-3 px-4 text-center">Actions</th>
                   </tr>
@@ -464,29 +547,56 @@ export default function InventoryClient() {
                 <tbody className="divide-y divide-slate-100">
                   {items.map((item) => {
                     const isLow = item.quantity <= item.minStock;
+                    const isDup = duplicates.some((g) => g.items.some((x) => x.id === item.id));
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-emerald-800">
-                          <button
-                            onClick={() => {
-                              setActiveItem(item);
-                              setIsSingleBarcodeModalOpen(true);
-                            }}
-                            className="text-emerald-700 hover:text-emerald-950 flex items-center gap-1 hover:underline text-left"
-                            title="Click to view full barcode & details"
-                          >
-                            <Barcode className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span>{item.serial}</span>
-                          </button>
-                        </td>
+                        {selectionMode && (
+                          <td className="py-3 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(item.id)}
+                              onChange={() => toggleSelectItem(item.id)}
+                              className="w-4 h-4 text-emerald-600 rounded"
+                            />
+                          </td>
+                        )}
                         <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900">{item.name}</div>
-                          {item.notes && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-xs">{item.notes}</div>}
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{item.name}</span>
+                            {item.dupKeptAt && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-extrabold text-[9px]">
+                                kept
+                              </span>
+                            )}
+                            {isDup && !item.dupKeptAt && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-extrabold text-[9px]">
+                                dup
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                            <User className="w-3 h-3 text-slate-400" />
+                            <span>by {item.userName || item.createdBy || "Staff"}</span>
+                            {item.notes && <span>• {item.notes}</span>}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-emerald-800">
+                          {item.serial}
                         </td>
                         <td className="py-3 px-4">
                           <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium text-[10px]">
                             {item.category}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-black text-slate-900">
+                          {formatCurrency(item.sellingPrice)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-medium text-slate-600">
+                          {item.costUnknown ? (
+                            <span className="text-amber-600 font-bold">Unknown</span>
+                          ) : (
+                            formatCurrency(item.costPrice)
+                          )}
                         </td>
                         <td className="py-3 px-4 text-right">
                           <span
@@ -497,31 +607,19 @@ export default function InventoryClient() {
                             {item.quantity} {item.unit}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right font-medium text-slate-600">
-                          {item.costUnknown ? (
-                            <span className="text-amber-600 font-bold">Unknown</span>
-                          ) : (
-                            formatCurrency(item.costPrice)
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-right font-bold text-slate-900">
-                          {formatCurrency(item.sellingPrice)}
-                        </td>
                         <td className="py-3 px-4 text-slate-600 font-medium">{item.location || "-"}</td>
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-1.5">
-                            {/* Barcode details icon */}
                             <button
                               onClick={() => {
                                 setActiveItem(item);
                                 setIsSingleBarcodeModalOpen(true);
                               }}
-                              title="View Item Barcode & Details"
+                              title="View Barcode & Details"
                               className="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            {/* Multiply Twin Copy */}
                             <button
                               onClick={() => handleMultiplyCopy(item)}
                               title="Multiply Twin Copy"
@@ -529,7 +627,6 @@ export default function InventoryClient() {
                             >
                               <Copy className="w-4 h-4" />
                             </button>
-                            {/* Edit */}
                             <button
                               onClick={() => {
                                 setEditingItem(item);
@@ -540,7 +637,6 @@ export default function InventoryClient() {
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
-                            {/* Delete */}
                             <button
                               onClick={() => {
                                 setDeletingItemId(item.id);
@@ -562,108 +658,120 @@ export default function InventoryClient() {
           )}
         </div>
       ) : (
-        /* Duplicates Review Tab */
+        /* Duplicates Review Tab matching spec */
         <div className="space-y-4">
           {duplicates.length === 0 ? (
-            <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400">
+            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-slate-400">
               <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto mb-3" />
-              <p className="text-sm font-bold text-slate-800">No duplicate clusters detected</p>
-              <p className="text-xs text-slate-400 mt-1">All item names in your catalog are unique.</p>
+              <p className="text-sm font-bold text-slate-800">Catalog is clean</p>
+              <p className="text-xs text-slate-400 mt-1">All stationery names in the shared catalog are unique.</p>
             </div>
           ) : (
-            duplicates.map((group, gIdx) => (
-              <div key={gIdx} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                    <h3 className="font-display font-black text-sm text-slate-900">
-                      Cluster: "{group.normalizedName}"
-                    </h3>
-                    <span className="px-2 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-800 font-bold">
-                      {group.items.length} records
-                    </span>
-                  </div>
-                </div>
+            duplicates.map((group, gIdx) => {
+              const unkeptInGroup = group.items.filter((x) => !x.dupKeptAt);
+              return (
+                <div key={gIdx} className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                      <h3 className="font-display font-black text-sm text-slate-900">
+                        Cluster: "{group.normalizedName}"
+                      </h3>
+                      <span className="px-2 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-800 font-bold">
+                        {group.items.length} records
+                      </span>
+                    </div>
 
-                <div className="divide-y divide-slate-100">
-                  {group.items.map((it) => (
-                    <div key={it.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                      <div>
+                    {unkeptInGroup.length > 1 && (
+                      <button
+                        onClick={() => handleKeepAllGroup(group.items)}
+                        className="px-3 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs rounded-xl transition-colors"
+                      >
+                        Keep All
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="divide-y divide-slate-100">
+                    {group.items.map((it) => (
+                      <div key={it.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setActiveItem(it);
+                                setIsSingleBarcodeModalOpen(true);
+                              }}
+                              className="font-mono font-bold text-emerald-800 hover:underline flex items-center gap-1"
+                            >
+                              <Barcode className="w-3.5 h-3.5" />
+                              <span>{it.serial}</span>
+                            </button>
+                            <span className="font-bold text-slate-900">{it.name}</span>
+                            {it.dupKeptAt && (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                Kept by {it.dupKeptBy || "Staff"}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-slate-500 text-[11px] mt-0.5">
+                            Qty: <strong>{it.quantity}</strong> | Cost: {formatCurrency(it.costPrice)} | Price: {formatCurrency(it.sellingPrice)} | Added: {formatDate(it.createdAt)} by {it.userName || "Staff"}
+                          </div>
+                        </div>
+
                         <div className="flex items-center gap-2">
+                          {!it.dupKeptAt && (
+                            <button
+                              onClick={() => handleKeepDuplicate(it.id)}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-xs transition-colors"
+                            >
+                              Keep
+                            </button>
+                          )}
                           <button
                             onClick={() => {
-                              setActiveItem(it);
-                              setIsSingleBarcodeModalOpen(true);
+                              setEditingItem(it);
+                              setIsEditModalOpen(true);
                             }}
-                            className="font-mono font-bold text-emerald-800 hover:underline flex items-center gap-1"
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
                           >
-                            <Barcode className="w-3.5 h-3.5" />
-                            <span>{it.serial}</span>
+                            Edit
                           </button>
-                          <span className="font-bold text-slate-900">{it.name}</span>
-                          {it.dupKeptAt && (
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                              Kept by {it.dupKeptBy}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-slate-500 text-[11px] mt-0.5">
-                          Qty: <strong>{it.quantity}</strong> | Cost: {formatCurrency(it.costPrice)} | Price: {formatCurrency(it.sellingPrice)} | Created: {formatDate(it.createdAt)}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {!it.dupKeptAt && (
                           <button
-                            onClick={() => handleKeepDuplicate(it.id)}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-xs transition-colors"
+                            onClick={() => {
+                              setDeletingItemId(it.id);
+                              setIsMasterModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs transition-colors"
                           >
-                            Keep
+                            Delete
                           </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            setEditingItem(it);
-                            setIsEditModalOpen(true);
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => {
-                            setDeletingItemId(it.id);
-                            setIsMasterModalOpen(true);
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs transition-colors"
-                        >
-                          Delete
-                        </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
 
-      {/* Add Item Modal */}
+      {/* Add Item Modal with Live Margin Calculator */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-7 border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
             <h3 className="font-display font-black text-lg text-slate-900 pb-3 border-b border-slate-100">
               Add New Stationery Item
             </h3>
 
             {formError && (
-              <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
                 {formError}
               </div>
             )}
 
-            <form onSubmit={handleCreateItem} className="mt-4 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateItem} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Item Name *</label>
                 <input
@@ -671,7 +779,7 @@ export default function InventoryClient() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Pilot G2 0.7mm Retractable Gel Pen - Red"
+                  placeholder="e.g. Pilot G2 0.7mm Retractable Gel Pen - Blue"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-900"
                 />
               </div>
@@ -690,7 +798,7 @@ export default function InventoryClient() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Stock Qty</label>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Quantity</label>
                   <input
                     type="number"
                     min="0"
@@ -703,15 +811,26 @@ export default function InventoryClient() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Cost Price (ETB)</label>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Purchase Value / Cost (ETB)</label>
                   <input
                     type="number"
                     step="0.01"
+                    disabled={formData.costUnknown}
                     value={formData.costPrice}
                     onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium disabled:opacity-50"
                   />
+                  <label className="flex items-center gap-1.5 mt-1 cursor-pointer select-none text-[11px] text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={formData.costUnknown}
+                      onChange={(e) => setFormData({ ...formData, costUnknown: e.target.checked })}
+                      className="w-3.5 h-3.5 text-emerald-600 rounded"
+                    />
+                    <span>Cost Unknown</span>
+                  </label>
                 </div>
+
                 <div>
                   <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Selling Price (ETB) *</label>
                   <input
@@ -725,16 +844,17 @@ export default function InventoryClient() {
                 </div>
               </div>
 
+              {/* Live Margin Calculation Indicator */}
+              <div className="p-3 rounded-2xl bg-cream-50 border border-emerald-200/80 flex items-center justify-between text-xs">
+                <span className="text-slate-600 font-bold flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-emerald-700" /> Live Profit Margin:
+                </span>
+                <span className="font-black text-emerald-800 font-mono">
+                  {formatCurrency(addMargin)} ({addMarginPct.toFixed(1)}%)
+                </span>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Unit</label>
-                  <input
-                    type="text"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
-                  />
-                </div>
                 <div>
                   <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Location</label>
                   <input
@@ -745,9 +865,19 @@ export default function InventoryClient() {
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
                   />
                 </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Supplier</label>
+                  <input
+                    type="text"
+                    value={formData.supplier}
+                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                    placeholder="Official Supplier"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  />
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
@@ -771,18 +901,18 @@ export default function InventoryClient() {
       {/* Edit Item Modal */}
       {isEditModalOpen && editingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-7 border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
             <h3 className="font-display font-black text-lg text-slate-900 pb-3 border-b border-slate-100">
               Edit Item: {editingItem.serial}
             </h3>
 
             {formError && (
-              <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
                 {formError}
               </div>
             )}
 
-            <form onSubmit={handleUpdateItem} className="mt-4 space-y-3.5 text-xs">
+            <form onSubmit={handleUpdateItem} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Item Name</label>
                 <input
@@ -821,14 +951,24 @@ export default function InventoryClient() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Cost Price (ETB)</label>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Purchase Cost (ETB)</label>
                   <input
                     type="number"
                     step="0.01"
+                    disabled={editingItem.costUnknown}
                     value={editingItem.costPrice}
                     onChange={(e) => setEditingItem({ ...editingItem, costPrice: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium disabled:opacity-50"
                   />
+                  <label className="flex items-center gap-1.5 mt-1 cursor-pointer select-none text-[11px] text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={editingItem.costUnknown}
+                      onChange={(e) => setEditingItem({ ...editingItem, costUnknown: e.target.checked })}
+                      className="w-3.5 h-3.5 text-emerald-600 rounded"
+                    />
+                    <span>Cost Unknown</span>
+                  </label>
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Selling Price (ETB)</label>
@@ -843,7 +983,38 @@ export default function InventoryClient() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+              {/* Live Margin Calculation Indicator */}
+              <div className="p-3 rounded-2xl bg-cream-50 border border-emerald-200/80 flex items-center justify-between text-xs">
+                <span className="text-slate-600 font-bold flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-emerald-700" /> Profit Margin:
+                </span>
+                <span className="font-black text-emerald-800 font-mono">
+                  {formatCurrency(editMargin)} ({editMarginPct.toFixed(1)}%)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={editingItem.location || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, location: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Supplier</label>
+                  <input
+                    type="text"
+                    value={editingItem.supplier || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, supplier: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
@@ -878,7 +1049,7 @@ export default function InventoryClient() {
       <BarcodeSheetModal
         isOpen={isBarcodeSheetModalOpen}
         onClose={() => setIsBarcodeSheetModalOpen(false)}
-        items={items}
+        items={selectionMode && selectedIds.length > 0 ? items.filter((i) => selectedIds.includes(i.id)) : items}
       />
 
       {/* Import Modal */}
@@ -889,6 +1060,12 @@ export default function InventoryClient() {
           showToast(`Imported ${count} item(s) successfully!`);
           fetchInventory();
         }}
+      />
+
+      {/* Import Guide Modal */}
+      <ImportGuideModal
+        isOpen={isGuideModalOpen}
+        onClose={() => setIsGuideModalOpen(false)}
       />
 
       {/* Master Gate Modal */}

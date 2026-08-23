@@ -7,6 +7,7 @@ export interface InventoryItem {
   unit: string;
   quantity: number;
   minStock: number;
+  purchaseValue?: number; // Alias for costPrice
   costPrice: number;
   sellingPrice: number;
   costUnknown: boolean;
@@ -15,6 +16,8 @@ export interface InventoryItem {
   notes?: string | null;
   dupKeptAt?: string | Date | null;
   dupKeptBy?: string | null;
+  userId?: string | null;
+  userName?: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 }
@@ -23,6 +26,8 @@ export interface SaleItem {
   id?: string;
   saleId?: string;
   itemId: string;
+  itemName?: string;
+  serial?: string;
   item?: InventoryItem;
   quantity: number;
   unitPrice: number;
@@ -32,6 +37,7 @@ export interface SaleItem {
 
 export interface Sale {
   id: string;
+  saleNo?: string;
   receiptNo: string;
   customerName?: string | null;
   customerPhone?: string | null;
@@ -40,9 +46,13 @@ export interface Sale {
   tax: number;
   paymentMethod: "CASH" | "CARD" | "MOBILE" | "CREDIT" | string;
   status: "COMPLETED" | "REFUNDED" | "CANCELLED" | string;
+  refunded?: boolean;
+  refundedAt?: string | Date | null;
   isCredit: boolean;
   isBackdated: boolean;
   notes?: string | null;
+  userId?: string | null;
+  userName?: string | null;
   createdBy?: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -142,24 +152,15 @@ export interface Session {
   createdAt: string | Date;
 }
 
-export type QrGridPreset = 
-  | "2x2" 
-  | "3x3" 
-  | "4x3" 
-  | "5x3" 
-  | "5x4" 
-  | "6x6" 
-  | "8x8" 
-  | "9x9" 
-  | "10x10" 
-  | "12x12";
-
-export interface QrSheetOptions {
-  grid: QrGridPreset;
-  items?: InventoryItem[];
-  itemIds?: string[];
-  repeatCount?: number;
-  includePrice?: boolean;
+export interface BarcodeRenderOptions {
+  width?: number;
+  height?: number;
+  showText?: boolean;
+  fontSize?: number;
+  fontFamily?: string;
+  lineColor?: string;
+  background?: string;
+  margin?: number;
 }
 
 export interface InventoryKpis {
