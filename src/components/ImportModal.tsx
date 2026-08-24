@@ -5,11 +5,12 @@ import { UploadCloud, FileSpreadsheet, X, CheckCircle2, AlertTriangle } from "lu
 import * as XLSX from "xlsx";
 import { generateInventoryTemplateExcel } from "@/lib/excel";
 import ProgressBar from "@/components/ProgressBar";
+import { InventoryItem } from "@/lib/types";
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (count: number) => void;
+  onSuccess: (count: number, items?: InventoryItem[]) => void;
 }
 
 function findColValue(row: any, aliases: string[]): any {
@@ -125,7 +126,7 @@ export default function ImportModal({
         throw new Error(data.error || "Batch import failed.");
       }
 
-      onSuccess(data.count || parsedItems.length);
+      onSuccess(data.count || parsedItems.length, data.items || []);
       onClose();
     } catch (err: any) {
       setError("Import error: " + err.message);
